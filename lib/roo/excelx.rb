@@ -367,7 +367,7 @@ class Roo::Excelx < Roo::GenericSpreadsheet
       when :percentage
         v.to_f
       when :time
-        v.to_f*(24*60*60)
+        (base_date+v.to_f).strftime("%H:%M:%S")
       else
         v
       end
