@@ -5,8 +5,8 @@ require 'nokogiri'
 class Roo::Excelx < Roo::GenericSpreadsheet
   module Format
     EXCEPTIONAL_FORMATS = {
-      'h:mm am/pm' => :date,
-      'h:mm:ss am/pm' => :date,
+      'h:mm am/pm' => :time,
+      'h:mm:ss am/pm' => :time,
     }
 
     STANDARD_FORMATS = {
