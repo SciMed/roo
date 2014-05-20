@@ -2,10 +2,18 @@
 
 require 'tmpdir'
 require 'stringio'
-require 'zip/zipfilesystem'
+
+begin
+  require 'zip/zipfilesystem'
+  Roo::ZipFile = Zip::ZipFile
+rescue LoadError
+  # For rubyzip >= 1.0.0
+  require 'zip/filesystem'
+  Roo::ZipFile = Zip::File
+end
 
 # Base class for all other types of spreadsheets
-class Roo::GenericSpreadsheet
+class Roo::Base
   include Enumerable
 
   TEMP_PREFIX = "oo_"
@@ -18,7 +26,7 @@ class Roo::GenericSpreadsheet
   protected
 
   def self.split_coordinate(str)
-    letter,number = Roo::GenericSpreadsheet.split_coord(str)
+    letter,number = Roo::Base.split_coord(str)
     x = letter_to_number(letter)
     y = number
     return y, x
@@ -37,9 +45,12 @@ class Roo::GenericSpreadsheet
 
   public
 
-  def initialize(filename, packed=nil, file_warning=:error, tmpdir=nil)
-    @cell = Hash.new{|h,k| h[k] = {}}
-    @cell_type = Hash.new{|h,k| h[k] = {}}
+  def initialize(filename, options={}, file_warning=:error, tmpdir=nil)
+    @filename = filename
+    @options = options
+
+    @cell = {}
+    @cell_type = {}
     @cells_read = {}
 
     @first_row = {}
@@ -47,13 +58,8 @@ class Roo::GenericSpreadsheet
     @first_column = {}
     @last_column = {}
 
-    @style = {}
-    @style_defaults = Hash.new { |h,k| h[k] = [] }
-    @style_definitions = {}
-
-    @default_sheet = self.sheets.first
-    @formula = {}
     @header_line = 1
+    @default_sheet = self.sheets.first
   end
 
   # sets the working sheet in the document
@@ -67,18 +73,18 @@ class Roo::GenericSpreadsheet
 
   # first non-empty column as a letter
   def first_column_as_letter(sheet=nil)
-    Roo::GenericSpreadsheet.number_to_letter(first_column(sheet))
+    Roo::Base.number_to_letter(first_column(sheet))
   end
 
   # last non-empty column as a letter
   def last_column_as_letter(sheet=nil)
-    Roo::GenericSpreadsheet.number_to_letter(last_column(sheet))
+    Roo::Base.number_to_letter(last_column(sheet))
   end
 
   # returns the number of the first non-empty row
   def first_row(sheet=nil)
     sheet ||= @default_sheet
-    read_cells(sheet) unless @cells_read[sheet]
+    read_cells(sheet)
     if @first_row[sheet]
       return @first_row[sheet]
     end
@@ -96,7 +102,7 @@ class Roo::GenericSpreadsheet
   # returns the number of the last non-empty row
   def last_row(sheet=nil)
     sheet ||= @default_sheet
-    read_cells(sheet) unless @cells_read[sheet]
+    read_cells(sheet)
     if @last_row[sheet]
       return @last_row[sheet]
     end
@@ -114,7 +120,7 @@ class Roo::GenericSpreadsheet
   # returns the number of the first non-empty column
   def first_column(sheet=nil)
     sheet ||= @default_sheet
-    read_cells(sheet) unless @cells_read[sheet]
+    read_cells(sheet)
     if @first_column[sheet]
       return @first_column[sheet]
     end
@@ -132,7 +138,7 @@ class Roo::GenericSpreadsheet
   # returns the number of the last non-empty column
   def last_column(sheet=nil)
     sheet ||= @default_sheet
-    read_cells(sheet) unless @cells_read[sheet]
+    read_cells(sheet)
     if @last_column[sheet]
       return @last_column[sheet]
     end
@@ -166,7 +172,7 @@ class Roo::GenericSpreadsheet
           result << "  col: #{col} \n"
           result << "  celltype: #{self.celltype(row,col,sheet)} \n"
           if self.celltype(row,col,sheet) == :time
-            result << "  value: #{Roo::GenericSpreadsheet.integer_to_timestring( self.cell(row,col,sheet))} \n"
+            result << "  value: #{Roo::Base.integer_to_timestring( self.cell(row,col,sheet))} \n"
           else
             result << "  value: #{self.cell(row,col,sheet)} \n"
           end
@@ -177,16 +183,16 @@ class Roo::GenericSpreadsheet
   end
 
   # write the current spreadsheet to stdout or into a file
-  def to_csv(filename=nil,sheet=nil)
+  def to_csv(filename=nil,sheet=nil,separator=',')
     sheet ||= @default_sheet
     if filename
       File.open(filename,"w") do |file|
-        write_csv_content(file,sheet)
+        write_csv_content(file,sheet,separator)
       end
       return true
     else
       sio = StringIO.new
-      write_csv_content(sio,sheet)
+      write_csv_content(sio,sheet,separator)
       sio.rewind
       return sio.read
     end
@@ -201,9 +207,14 @@ class Roo::GenericSpreadsheet
 
     Matrix.rows((from_row||first_row(sheet)).upto(to_row||last_row(sheet)).map do |row|
       (from_column||first_column(sheet)).upto(to_column||last_column(sheet)).map do |col|
-        cell(row,col)
+        cell(row,col,sheet)
       end
     end)
+  end
+
+  # call to_s method defined on subclasses
+  def inspect
+    to_s
   end
 
   # find a row either by row number or a condition
@@ -211,43 +222,14 @@ class Roo::GenericSpreadsheet
   # (experimental. see examples in the test_roo.rb file)
   def find(*args) # :nodoc
     options = (args.last.is_a?(Hash) ? args.pop : {})
-    result_array = options[:array]
-    header_for = Hash[1.upto(last_column).map do |col|
-      [col, cell(@header_line,col)]
-    end]
-    #-- id
-    if args[0].class == Fixnum
-      rownum = args[0]
-      if @header_line
-        [Hash[1.upto(self.row().size).map {|j|
-          [header_for.fetch(j), cell(rownum,j)]
-        }]]
-      else
-        self.row(rownum).size.times.map {|j|
-          cell(rownum,j + 1)
-        }
-      end
-    #-- :all
-    elsif args[0] == :all
-      rows = first_row.upto(last_row)
 
-      # are all conditions met?
-      if (conditions = options[:conditions]) && !conditions.empty?
-        column_with = header_for.invert
-        rows = rows.select do |i|
-          conditions.all? { |key,val| cell(i,column_with[key]) == val }
-        end
-      end
-
-      rows.map do |i|
-        if result_array
-          self.row(i)
-        else
-          Hash[1.upto(self.row(i).size).map do |j|
-            [header_for.fetch(j), cell(i,j)]
-          end]
-        end
-      end
+    case args[0]
+    when Fixnum
+      find_by_row(args[0])
+    when :all
+      find_by_conditions(options)
+    else
+      raise ArgumentError, "unexpected arg #{args[0].inspect}, pass a row index or :all"
     end
   end
 
@@ -255,7 +237,7 @@ class Roo::GenericSpreadsheet
   # row numbers are 1,2,3,... like in the spreadsheet
   def row(rownumber,sheet=nil)
     sheet ||= @default_sheet
-    read_cells(sheet) unless @cells_read[sheet]
+    read_cells(sheet)
     first_column(sheet).upto(last_column(sheet)).map do |col|
       cell(rownumber,col,sheet)
     end
@@ -268,7 +250,7 @@ class Roo::GenericSpreadsheet
       columnnumber = Roo::Excel.letter_to_number(columnnumber)
     end
     sheet ||= @default_sheet
-    read_cells(sheet) unless @cells_read[sheet]
+    read_cells(sheet)
     first_row(sheet).upto(last_row(sheet)).map do |row|
       cell(row,columnnumber,sheet)
     end
@@ -278,7 +260,7 @@ class Roo::GenericSpreadsheet
   # (this will not be saved back to the spreadsheet file!)
   def set(row,col,value,sheet=nil) #:nodoc:
     sheet ||= @default_sheet
-    read_cells(sheet) unless @cells_read[sheet]
+    read_cells(sheet)
     row, col = normalize(row,col)
     cell_type = case value
                 when Fixnum then :float
@@ -293,21 +275,15 @@ class Roo::GenericSpreadsheet
 
   # reopens and read a spreadsheet document
   def reload
-    # von Abfrage der Klasse direkt auf .to_s == '..' umgestellt
     ds = @default_sheet
-    if self.class.to_s == 'Google'
-      initialize(@spreadsheetkey,@user,@password)
-    else
-      initialize(@filename)
-    end
+    reinitialize
     self.default_sheet = ds
-    #@first_row = @last_row = @first_column = @last_column = nil
   end
 
   # true if cell is empty
   def empty?(row, col, sheet=nil)
     sheet ||= @default_sheet
-    read_cells(sheet) unless @cells_read[sheet] or self.class == Roo::Excel
+    read_cells(sheet)
     row,col = normalize(row,col)
     contents = cell(row, col, sheet)
     !contents || (celltype(row, col, sheet) == :string && contents.empty?) \
@@ -317,25 +293,27 @@ class Roo::GenericSpreadsheet
   # returns information of the spreadsheet document and all sheets within
   # this document.
   def info
-    result = "File: #{File.basename(@filename)}\n"+
-      "Number of sheets: #{sheets.size}\n"+
-      "Sheets: #{sheets.join(', ')}\n"
-    n = 1
-    sheets.each {|sheet|
-      self.default_sheet = sheet
-      result << "Sheet " + n.to_s + ":\n"
-      unless first_row
-        result << "  - empty -"
-      else
-        result << "  First row: #{first_row}\n"
-        result << "  Last row: #{last_row}\n"
-        result << "  First column: #{Roo::GenericSpreadsheet.number_to_letter(first_column)}\n"
-        result << "  Last column: #{Roo::GenericSpreadsheet.number_to_letter(last_column)}"
-      end
-      result << "\n" if sheet != sheets.last
-      n += 1
-    }
-    result
+    without_changing_default_sheet do
+      result = "File: #{File.basename(@filename)}\n"+
+        "Number of sheets: #{sheets.size}\n"+
+        "Sheets: #{sheets.join(', ')}\n"
+      n = 1
+      sheets.each {|sheet|
+        self.default_sheet = sheet
+        result << "Sheet " + n.to_s + ":\n"
+        unless first_row
+          result << "  - empty -"
+        else
+          result << "  First row: #{first_row}\n"
+          result << "  Last row: #{last_row}\n"
+          result << "  First column: #{Roo::Base.number_to_letter(first_column)}\n"
+          result << "  Last column: #{Roo::Base.number_to_letter(last_column)}"
+        end
+        result << "\n" if sheet != sheets.last
+        n += 1
+      }
+      result
+    end
   end
 
   # returns an XML representation of all sheets of a spreadsheet file
@@ -370,7 +348,7 @@ class Roo::GenericSpreadsheet
     # #aa42 => #cell('aa',42)
     # #aa42('Sheet1')  => #cell('aa',42,'Sheet1')
     if m =~ /^([a-z]+)(\d)$/
-      col = Roo::GenericSpreadsheet.letter_to_number($1)
+      col = Roo::Base.letter_to_number($1)
       row = $2.to_i
       if args.empty?
         cell(row,col)
@@ -382,148 +360,120 @@ class Roo::GenericSpreadsheet
     end
   end
 
-=begin
-#TODO: hier entfernen
-  # returns each formula in the selected sheet as an array of elements
-  # [row, col, formula]
-  def formulas(sheet=nil)
-    theformulas = Array.new
-    sheet ||= @default_sheet
-    read_cells(sheet) unless @cells_read[sheet]
-    return theformulas unless first_row(sheet) # if there is no first row then
-    # there can't be formulas
-    first_row(sheet).upto(last_row(sheet)) {|row|
-      first_column(sheet).upto(last_column(sheet)) {|col|
-        if formula?(row,col,sheet)
-          theformulas << [row, col, formula(row,col,sheet)]
-        end
-      }
-    }
-    theformulas
+  # access different worksheets by calling spreadsheet.sheet(1)
+  # or spreadsheet.sheet('SHEETNAME')
+  def sheet(index,name=false)
+    @default_sheet = String === index ? index : self.sheets[index]
+    name ? [@default_sheet,self] : self
   end
-=end
 
-
-
-    # FestivalBobcats fork changes begin here
-
-
-
-    # access different worksheets by calling spreadsheet.sheet(1)
-    # or spreadsheet.sheet('SHEETNAME')
-    def sheet(index,name=false)
-      @default_sheet = String === index ? index : self.sheets[index]
-      name ? [@default_sheet,self] : self
+  # iterate through all worksheets of a document
+  def each_with_pagename
+    self.sheets.each do |s|
+      yield sheet(s,true)
     end
+  end
 
-    # iterate through all worksheets of a document
-    def each_with_pagename
-      self.sheets.each do |s|
-        yield sheet(s,true)
+  # by passing in headers as options, this method returns
+  # specific columns from your header assignment
+  # for example:
+  # xls.sheet('New Prices').parse(:upc => 'UPC', :price => 'Price') would return:
+  # [{:upc => 123456789012, :price => 35.42},..]
+
+  # the queries are matched with regex, so regex options can be passed in
+  # such as :price => '^(Cost|Price)'
+  # case insensitive by default
+
+
+  # by using the :header_search option, you can query for headers
+  # and return a hash of every row with the keys set to the header result
+  # for example:
+  # xls.sheet('New Prices').parse(:header_search => ['UPC*SKU','^Price*\sCost\s'])
+
+  # that example searches for a column titled either UPC or SKU and another
+  # column titled either Price or Cost (regex characters allowed)
+  # * is the wildcard character
+
+  # you can also pass in a :clean => true option to strip the sheet of
+  # odd unicode characters and white spaces around columns
+
+  def each(options={})
+    if options.empty?
+      1.upto(last_row) do |line|
+        yield row(line)
       end
-    end
+    else
+      if options[:clean]
+        options.delete(:clean)
+        @cleaned ||= {}
+        @cleaned[@default_sheet] || clean_sheet(@default_sheet)
+      end
 
-    # by passing in headers as options, this method returns
-    # specific columns from your header assignment
-    # for example:
-    # xls.sheet('New Prices').parse(:upc => 'UPC', :price => 'Price') would return:
-    # [{:upc => 123456789012, :price => 35.42},..]
-
-    # the queries are matched with regex, so regex options can be passed in
-    # such as :price => '^(Cost|Price)'
-    # case insensitive by default
-
-
-    # by using the :header_search option, you can query for headers
-    # and return a hash of every row with the keys set to the header result
-    # for example:
-    # xls.sheet('New Prices').parse(:header_search => ['UPC*SKU','^Price*\sCost\s'])
-
-    # that example searches for a column titled either UPC or SKU and another
-    # column titled either Price or Cost (regex characters allowed)
-    # * is the wildcard character
-
-    # you can also pass in a :clean => true option to strip the sheet of
-    # odd unicode characters and white spaces around columns
-
-    def each(options={})
-      if options.empty?
-        1.upto(last_row) do |line|
-          yield row(line)
-        end
+      if options[:header_search]
+        @headers = nil
+        @header_line = row_with(options[:header_search])
+      elsif [:first_row,true].include?(options[:headers])
+        @headers = []
+        row(first_row).each_with_index {|x,i| @headers << [x,i + 1]}
       else
-        if options[:clean]
-          options.delete(:clean)
-          @cleaned ||= {}
-          @cleaned[@default_sheet] || clean_sheet(@default_sheet)
-        end
+        set_headers(options)
+      end
 
-        if options[:header_search]
-          @headers = nil
-          @header_line = row_with(options[:header_search])
-        elsif [:first_row,true].include?(options[:headers])
-          @headers = []
-          row(first_row).each_with_index {|x,i| @headers << [x,i + 1]}
-        else
-          set_headers(options)
-        end
+      headers = @headers ||
+        Hash[(first_column..last_column).map do |col|
+          [cell(@header_line,col), col]
+        end]
 
-        headers = @headers ||
-          Hash[(first_column..last_column).map do |col|
-            [cell(@header_line,col), col]
-          end]
-
-        @header_line.upto(last_row) do |line|
-          yield(Hash[headers.map {|k,v| [k,cell(line,v)]}])
-        end
+      @header_line.upto(last_row) do |line|
+        yield(Hash[headers.map {|k,v| [k,cell(line,v)]}])
       end
     end
+  end
 
-    def parse(options={})
-      ary = []
-      if block_given?
-        each(options) {|row| ary << yield(row)}
-      else
-        each(options) {|row| ary << row}
+  def parse(options={})
+    ary = []
+    if block_given?
+      each(options) {|row| ary << yield(row)}
+    else
+      each(options) {|row| ary << row}
+    end
+    ary
+  end
+
+  def row_with(query,return_headers=false)
+    query.map! {|x| Array(x.split('*'))}
+    line_no = 0
+    each do |row|
+      line_no += 1
+      # makes sure headers is the first part of wildcard search for priority
+      # ex. if UPC and SKU exist for UPC*SKU search, UPC takes the cake
+      headers = query.map do |q|
+        q.map {|i| row.grep(/#{i}/i)[0]}.compact[0]
+      end.compact
+
+      if headers.length == query.length
+        @header_line = line_no
+        return return_headers ? headers : line_no
+      elsif line_no > 100
+        raise "Couldn't find header row."
       end
-      ary
     end
-
-    def row_with(query,return_headers=false)
-      query.map! {|x| Array(x.split('*'))}
-      line_no = 0
-      each do |row|
-        line_no += 1
-        # makes sure headers is the first part of wildcard search for priority
-        # ex. if UPC and SKU exist for UPC*SKU search, UPC takes the cake
-        headers = query.map do |q|
-          q.map {|i| row.grep(/#{i}/i)[0]}.compact[0]
-        end.compact
-
-        if headers.length == query.length
-          @header_line = line_no
-          return return_headers ? headers : line_no
-        elsif line_no > 100
-          raise "Couldn't find header row."
-        end
-      end
-    end
-
-    # this method lets you find the worksheet with the most data
-    def longest_sheet
-      sheet(@workbook.worksheets.inject {|m,o|
-        o.row_count > m.row_count ? o : m
-      }.name)
-    end
+  end
 
   protected
 
+  def load_xml(path)
+    File.open(path) do |file|
+      Nokogiri::XML(file)
+    end
+  end
+
   def file_type_check(filename, ext, name, warning_level, packed=nil)
     new_expression = {
-      '.ods' => 'Roo::Openoffice.new',
+      '.ods' => 'Roo::OpenOffice.new',
       '.xls' => 'Roo::Excel.new',
       '.xlsx' => 'Roo::Excelx.new',
-      '.csv' => 'Roo::Csv.new',
+      '.csv' => 'Roo::CSV.new',
       '.xml' => 'Roo::Excel2003XML.new',
     }
     if packed == :zip
@@ -574,6 +524,52 @@ class Roo::GenericSpreadsheet
 
   private
 
+  def find_by_row(row_index)
+    row_index += (header_line - 1) if @header_line
+
+    row(row_index).size.times.map do |cell_index|
+      cell(row_index, cell_index + 1)
+    end
+  end
+
+  def find_by_conditions(options)
+    rows = first_row.upto(last_row)
+    header_for = Hash[1.upto(last_column).map do |col|
+      [col, cell(@header_line,col)]
+    end]
+
+    # are all conditions met?
+    conditions = options[:conditions]
+    if conditions && !conditions.empty?
+      column_with = header_for.invert
+      rows = rows.select do |i|
+        conditions.all? { |key,val| cell(i,column_with[key]) == val }
+      end
+    end
+
+    if options[:array]
+      rows.map {|i| self.row(i) }
+    else
+      rows.map do |i|
+        Hash[1.upto(self.row(i).size).map do |j|
+          [header_for.fetch(j), cell(i,j)]
+        end]
+      end
+    end
+  end
+
+
+  def without_changing_default_sheet
+    original_default_sheet = default_sheet
+    yield
+  ensure
+    self.default_sheet = original_default_sheet
+  end
+
+  def reinitialize
+    initialize(@filename)
+  end
+
   def make_tmpdir(tmp_root = nil)
     Dir.mktmpdir(TEMP_PREFIX, tmp_root || ENV['ROO_TMP']) do |tmpdir|
       yield tmpdir
@@ -581,7 +577,7 @@ class Roo::GenericSpreadsheet
   end
 
   def clean_sheet(sheet)
-    read_cells(sheet) unless @cells_read[sheet]
+    read_cells(sheet)
     @cell[sheet].each_pair do |coord,value|
       if String === value
         @cell[sheet][coord] = sanitize_value(value)
@@ -627,7 +623,7 @@ class Roo::GenericSpreadsheet
       end
     end
     if col.class == String
-      col = Roo::GenericSpreadsheet.letter_to_number(col)
+      col = Roo::Base.letter_to_number(col)
     end
     return row,col
   end
@@ -636,21 +632,20 @@ class Roo::GenericSpreadsheet
     filename.start_with?("http://", "https://")
   end
 
-  def open_from_uri(uri, tmpdir)
+  def download_uri(uri, tmpdir)
     require 'open-uri'
+    tempfilename = File.join(tmpdir, File.basename(uri))
     response = ''
     begin
-      open(uri, "User-Agent" => "Ruby/#{RUBY_VERSION}") { |net|
-        response = net.read
-        tempfilename = File.join(tmpdir, File.basename(uri))
-        File.open(tempfilename,"wb") do |file|
-          file.write(response)
-        end
-      }
+      File.open(tempfilename,"wb") do |file|
+        open(uri, "User-Agent" => "Ruby/#{RUBY_VERSION}") { |net|
+          file.write(net.read)
+        }
+      end
     rescue OpenURI::HTTPError
       raise "could not open #{uri}"
     end
-    File.join(tmpdir, File.basename(uri))
+    tempfilename
   end
 
   def open_from_stream(stream, tmpdir)
@@ -697,7 +692,7 @@ class Roo::GenericSpreadsheet
   end
 
   def unzip(filename, tmpdir)
-    Zip::ZipFile.open(filename) do |zip|
+    Roo::ZipFile.open(filename) do |zip|
       process_zipfile_packed(zip, tmpdir)
     end
   end
@@ -739,12 +734,12 @@ class Roo::GenericSpreadsheet
 
   # Write all cells to the csv file. File can be a filename or nil. If the this
   # parameter is nil the output goes to STDOUT
-  def write_csv_content(file=nil,sheet=nil)
+  def write_csv_content(file=nil,sheet=nil,separator=',')
     file ||= STDOUT
     if first_row(sheet) # sheet is not empty
       1.upto(last_row(sheet)) do |row|
         1.upto(last_column(sheet)) do |col|
-          file.print(",") if col > 1
+          file.print(separator) if col > 1
           file.print cell_to_csv(row,col,sheet)
         end
         file.print("\n")
@@ -760,10 +755,12 @@ class Roo::GenericSpreadsheet
       onecell = cell(row,col,sheet)
 
       case celltype(row,col,sheet)
-      when :string
+      when :string, :link
         unless onecell.empty?
           %{"#{onecell.gsub(/"/,'""')}"}
         end
+      when :boolean
+        %{"#{onecell.gsub(/"/,'""').downcase}"}
       when :float, :percentage
         if onecell == onecell.to_i
           onecell.to_i.to_s
@@ -790,7 +787,9 @@ class Roo::GenericSpreadsheet
       when :date, :datetime
         onecell.to_s
       when :time
-        Roo::GenericSpreadsheet.integer_to_timestring(onecell)
+        Roo::Base.integer_to_timestring(onecell)
+      when :link
+          %{"#{onecell.url.gsub(/"/,'""')}"}
       else
         raise "unhandled celltype #{celltype(row,col,sheet)}"
       end || ""

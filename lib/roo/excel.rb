@@ -1,23 +1,35 @@
 require 'spreadsheet'
-#require 'lib/roo/generic_spreadsheet'
-#require 'parseexcel'
-CHARGUESS =
-  begin
-    require 'charguess'
-    true
-  rescue LoadError
-    false
-  end
 
 # Class for handling Excel-Spreadsheets
-class Roo::Excel < Roo::GenericSpreadsheet
+class Roo::Excel < Roo::Base
+  FORMULAS_MESSAGE = 'the spreadsheet gem does not support forumulas, so roo can not.'
+  CHARGUESS =
+    begin
+      require 'charguess'
+      true
+    rescue LoadError
+      false
+    end
+
+  attr_reader :workbook
 
   # Creates a new Excel spreadsheet object.
   # Parameter packed: :zip - File is a zip-file
-  def initialize(filename, packed = nil, file_warning = :error)
+  def initialize(filename, options = {}, deprecated_file_warning = :error)
+    if Hash === options
+      packed = options[:packed]
+      file_warning = options[:file_warning] || :error
+      mode = options[:mode] || "rb+"
+    else
+      warn 'Supplying `packed` or `file_warning` as separate arguments to `Roo::Excel.new` is deprecated. Use an options hash instead.'
+      packed = options
+      mode = "rb+"
+      file_warning = deprecated_file_warning
+    end
+
     file_type_check(filename,'.xls','an Excel', file_warning, packed)
     make_tmpdir do |tmpdir|
-      filename = open_from_uri(filename, tmpdir) if uri?(filename)
+      filename = download_uri(filename, tmpdir) if uri?(filename)
       filename = open_from_stream(filename[7..-1], tmpdir) if filename[0,7] == "stream:"
       filename = unzip(filename, tmpdir) if packed == :zip
 
@@ -25,18 +37,10 @@ class Roo::Excel < Roo::GenericSpreadsheet
       unless File.file?(@filename)
         raise IOError, "file #{@filename} does not exist"
       end
-      @workbook = Spreadsheet.open(filename)
+      @workbook = Spreadsheet.open(filename, mode)
     end
-    @default_sheet = self.sheets.first
-    @cell = Hash.new
-    @cell_type = Hash.new
+    super(filename, options)
     @formula = Hash.new
-    @first_row = Hash.new
-    @last_row = Hash.new
-    @first_column = Hash.new
-    @last_column = Hash.new
-    @header_line = 1
-    @cells_read = Hash.new
     @fonts = Hash.new
   end
 
@@ -49,12 +53,19 @@ class Roo::Excel < Roo::GenericSpreadsheet
     @workbook.worksheets.collect {|worksheet| normalize_string(worksheet.name)}
   end
 
+  # this method lets you find the worksheet with the most data
+  def longest_sheet
+    sheet(@workbook.worksheets.inject {|m,o|
+      o.row_count > m.row_count ? o : m
+    }.name)
+  end
+
   # returns the content of a cell. The upper left corner is (1,1) or ('A',1)
   def cell(row,col,sheet=nil)
     sheet ||= @default_sheet
     validate_sheet!(sheet)
 
-    read_cells(sheet) unless @cells_read[sheet]
+    read_cells(sheet)
     raise "should be read" unless @cells_read[sheet]
     row,col = normalize(row,col)
     if celltype(row,col,sheet) == :date
@@ -82,7 +93,7 @@ class Roo::Excel < Roo::GenericSpreadsheet
   # * :datetime
   def celltype(row,col,sheet=nil)
     sheet ||= @default_sheet
-    read_cells(sheet) unless @cells_read[sheet]
+    read_cells(sheet)
     row,col = normalize(row,col)
     begin
       if @formula[sheet] and @formula[sheet][[row,col]]
@@ -98,23 +109,19 @@ class Roo::Excel < Roo::GenericSpreadsheet
 
   # returns NO formula in excel spreadsheets
   def formula(row,col,sheet=nil)
-    wait_for_version_080
+    raise NotImplementedError, FORMULAS_MESSAGE
   end
-
-  # raises an exception because formulas are not supported for excel files
-  def formula?(row,col,sheet=nil)
-    wait_for_version_080
-  end
+  alias_method :formula?, :formula
 
   # returns NO formulas in excel spreadsheets
   def formulas(sheet=nil)
-    wait_for_version_080
+    raise NotImplementedError, FORMULAS_MESSAGE
   end
 
   # Given a cell, return the cell's font
   def font(row, col, sheet=nil)
     sheet ||= @default_sheet
-    read_cells(sheet) unless @cells_read[sheet]
+    read_cells(sheet)
     row,col = normalize(row,col)
     @fonts[sheet][[row,col]]
   end
@@ -123,7 +130,7 @@ class Roo::Excel < Roo::GenericSpreadsheet
   # mainly for debugging purposes
   def to_s(sheet=nil)
     sheet ||= @default_sheet
-    read_cells(sheet) unless @cells_read[sheet]
+    read_cells(sheet)
     @cell[sheet].inspect
   end
 
@@ -239,10 +246,7 @@ class Roo::Excel < Roo::GenericSpreadsheet
   def read_cells(sheet=nil)
     sheet ||= @default_sheet
     validate_sheet!(sheet)
-
-    if @cells_read[sheet]
-      raise "sheet #{sheet} already read"
-    end
+    return if @cells_read[sheet]
 
     worksheet = @workbook.worksheet(sheet_no(sheet))
     row_index=1
@@ -272,6 +276,7 @@ class Roo::Excel < Roo::GenericSpreadsheet
   # way formula stores the value
   def read_cell_content(row, idx)
     cell = row.at(idx)
+    cell = row[idx] if row[idx].class == Spreadsheet::Link
     cell = cell.value if cell.class == Spreadsheet::Formula
     cell
   end
@@ -286,7 +291,6 @@ class Roo::Excel < Roo::GenericSpreadsheet
       false
     end
   end
-  private :date_or_time?
 
   # Read the date-time cell and convert to,
   # the date-time values for Roo
@@ -326,7 +330,6 @@ class Roo::Excel < Roo::GenericSpreadsheet
     end
     return value_type, value
   end
-  private :read_cell_date_or_time
 
   # Read the cell and based on the class,
   # return the values for Roo
@@ -336,6 +339,9 @@ class Roo::Excel < Roo::GenericSpreadsheet
     when Float, Integer, Fixnum, Bignum
       value_type = :float
       value = cell.to_f
+    when Spreadsheet::Link
+      value_type = :link
+      value = cell
     when String, TrueClass, FalseClass
       value_type = :string
       value = cell.to_s
@@ -344,16 +350,6 @@ class Roo::Excel < Roo::GenericSpreadsheet
       value = nil
     end # case
     return value_type, value
-  end
-  private :read_cell
-
-  def wait_for_version_080
-    if Spreadsheet::VERSION<='0.8.0'
-      raise 'Formulas are not supported for excel spreadsheets.' +
-        " We have to wait for the 0.8.0 version of the Spreadsheet gem (currently used version is #{Spreadsheet::VERSION})"
-    else
-      raise 'Thomas should implement formulas from Spreadsheet gem'
-    end
   end
 
 end

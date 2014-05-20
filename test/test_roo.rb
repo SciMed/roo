@@ -21,11 +21,11 @@ require File.dirname(__FILE__) + '/test_helper'
 
 class TestRoo < Test::Unit::TestCase
 
-  OPENOFFICE   = false  	# do Openoffice-Spreadsheet Tests? (.ods files)
-  EXCEL        = true	# do Excel Tests? (.xls files)
+  OPENOFFICE   = true 	# do OpenOffice-Spreadsheet Tests? (.ods files)
+  EXCEL        = true  	# do Excel Tests? (.xls files)
   GOOGLE       = false 	# do Google-Spreadsheet Tests?
   EXCELX       = true  	# do Excelx Tests? (.xlsx files)
-  LIBREOFFICE  = true  	# do Libreoffice tests? (.ods files)
+  LIBREOFFICE  = true  	# do LibreOffice tests? (.ods files)
   CSV          = true  	# do CSV tests? (.csv files)
 
   FORMATS = {
@@ -39,10 +39,6 @@ class TestRoo < Test::Unit::TestCase
   ONLINE = false
   LONG_RUN = false
 
-  def test_internal_minutes
-    assert_equal 42*60, 42.minutes
-  end
-
   def fixture_filename(name, format)
     case format
     when :excel
@@ -52,7 +48,7 @@ class TestRoo < Test::Unit::TestCase
     when :openoffice, :libreoffice
       "#{name}.ods"
     when :google
-      key_of(name) || name
+      key_of(name)
     end
   end
 
@@ -96,36 +92,9 @@ class TestRoo < Test::Unit::TestCase
     end
   end
 
-  def test_classes
-    if OPENOFFICE
-      oo = Roo::Openoffice.new(File.join(TESTDIR,"numbers1.ods"))
-      assert_kind_of Roo::Openoffice, oo
-    end
-    if EXCEL
-      oo = Roo::Excel.new(File.join(TESTDIR,"numbers1.xls"))
-      assert_kind_of Roo::Excel, oo
-    end
-    if GOOGLE
-      oo = Roo::Google.new(key_of("numbers1"))
-      assert_kind_of Roo::Google, oo
-    end
-    if EXCELX
-      oo = Roo::Excelx.new(File.join(TESTDIR,"numbers1.xlsx"))
-      assert_kind_of Roo::Excelx, oo
-    end
-    if LIBREOFFICE
-      oo = Roo::Libreoffice.new(File.join(TESTDIR,"numbers1.ods"))
-      assert_kind_of Roo::Libreoffice, oo
-    end
-    if CSV
-      oo = Roo::Csv.new(File.join(TESTDIR,"numbers1.csv"))
-      assert_kind_of Roo::Csv, oo
-    end
-  end
-
   def test_sheets_csv
     if CSV
-      oo = Roo::Csv.new(File.join(TESTDIR,'numbers1.csv'))
+      oo = Roo::CSV.new(File.join(TESTDIR,'numbers1.csv'))
       assert_equal ["default"], oo.sheets
       assert_raise(RangeError) { oo.default_sheet = "no_sheet" }
       assert_raise(TypeError)  { oo.default_sheet = [1,2,3] }
@@ -165,7 +134,7 @@ class TestRoo < Test::Unit::TestCase
       assert_equal "test", oo.cell(2,6)
       assert_equal :string, oo.celltype(2,6)
       assert_equal 11, oo.cell(2,7)
-      unless oo.kind_of? Roo::Csv
+      unless oo.kind_of? Roo::CSV
         assert_equal :float, oo.celltype(2,7)
       end
       assert_equal 10, oo.cell(4,1)
@@ -178,7 +147,7 @@ class TestRoo < Test::Unit::TestCase
       assert_equal 12, oo.cell(4,'C')
       assert_equal 13, oo.cell(4,'D')
       assert_equal 14, oo.cell(4,'E')
-      unless oo.kind_of? Roo::Csv
+      unless oo.kind_of? Roo::CSV
         assert_equal :date, oo.celltype(5,1)
         assert_equal Date.new(1961,11,21), oo.cell(5,1)
         assert_equal "1961-11-21", oo.cell(5,1).to_s
@@ -219,7 +188,7 @@ class TestRoo < Test::Unit::TestCase
 
   def test_libre_office
 	  if LIBREOFFICE
-      oo = Roo::Libreoffice.new(File.join(TESTDIR, "numbers1.ods"))
+      oo = Roo::LibreOffice.new(File.join(TESTDIR, "numbers1.ods"))
       oo.default_sheet = oo.sheets.first
       assert_equal 41, oo.cell('a',12)
 	  end
@@ -235,16 +204,12 @@ class TestRoo < Test::Unit::TestCase
       assert_raise(RangeError) { oo.celltype('C',5,"non existing sheet name")}
       assert_raise(RangeError) { oo.empty?('C',5,"non existing sheet name")}
       if oo.class == Roo::Excel
-        assert_raise(RuntimeError) { oo.formula?('C',5,"non existing sheet name")}
-        assert_raise(RuntimeError) { oo.formula('C',5,"non existing sheet name")}
+        assert_raise(NotImplementedError) { oo.formula?('C',5,"non existing sheet name")}
+        assert_raise(NotImplementedError) { oo.formula('C',5,"non existing sheet name")}
       else
         assert_raise(RangeError) { oo.formula?('C',5,"non existing sheet name")}
         assert_raise(RangeError) { oo.formula('C',5,"non existing sheet name")}
-        begin
-          assert_raise(RangeError) { oo.set('C',5,42,"non existing sheet name")}
-        rescue NameError
-          #
-        end
+        assert_raise(RangeError) { oo.set('C',5,42,"non existing sheet name")}
         assert_raise(RangeError) { oo.formulas("non existing sheet name")}
       end
       assert_raise(RangeError) { oo.to_yaml({},1,1,1,1,"non existing sheet name")}
@@ -319,7 +284,7 @@ class TestRoo < Test::Unit::TestCase
       assert_equal "A:string",oo.cell(4, 3)+":"+oo.celltype(4, 3).to_s
 
       # Cells values in row 5:
-      if oo.class == Roo::Openoffice
+      if oo.class == Roo::OpenOffice
         assert_equal "0.01:percentage",oo.cell(5, 1).to_s+":"+oo.celltype(5, 1).to_s
         assert_equal "0.01:percentage",oo.cell(5, 2).to_s+":"+oo.celltype(5, 2).to_s
         assert_equal "0.01:percentage",oo.cell(5, 3).to_s+":"+oo.celltype(5, 3).to_s
@@ -372,7 +337,7 @@ class TestRoo < Test::Unit::TestCase
       assert_equal 21.0, oo.cell('A',7) #TODO: better solution Fixnum/Float
       assert_equal :formula, oo.celltype('A',7)
       # assert_equal "=[Sheet2.A1]", oo.formula('C',7)
-      # !!! different from formulas in Openoffice
+      # !!! different from formulas in OpenOffice
       #was: assert_equal "=sheet2!R[-6]C[-2]", oo.formula('C',7)
       # has Google changed their format of formulas/references to other sheets?
       assert_equal "=Sheet2!R[-6]C[-2]", oo.formula('C',7)
@@ -408,7 +373,7 @@ class TestRoo < Test::Unit::TestCase
       assert_equal 21, oo.cell('A',7)
       assert_equal :formula, oo.celltype('A',7)
       #steht nicht in Datei, oder?
-      #nein, diesen Bezug habe ich nur in der Openoffice-Datei
+      #nein, diesen Bezug habe ich nur in der OpenOffice-Datei
       #assert_equal "=[Sheet2.A1]", oo.formula('C',7)
       assert_nil oo.formula('A',6)
       # assert_equal [[7, 1, "=SUM([.A1:.A6])"],
@@ -474,7 +439,7 @@ class TestRoo < Test::Unit::TestCase
     end
   end
 
-  def test_excel_open_from_uri_and_zipped
+  def test_excel_download_uri_and_zipped
     if EXCEL
       if ONLINE
         url = 'http://stiny-leonhard.de/bode-v1.xls.zip'
@@ -485,11 +450,11 @@ class TestRoo < Test::Unit::TestCase
     end
   end
 
-  def test_openoffice_open_from_uri_and_zipped
+  def test_openoffice_download_uri_and_zipped
     if OPENOFFICE
       if ONLINE
         url = 'http://spazioinwind.libero.it/s2/rata.ods.zip'
-        sheet = Roo::Openoffice.new(url, :zip)
+        sheet = Roo::OpenOffice.new(url, :zip)
         #has been changed: assert_equal 'ist "e" im Nenner von H(s)', sheet.cell('b', 5)
         assert_in_delta 0.001, 505.14, sheet.cell('c', 33).to_f
       end
@@ -507,7 +472,7 @@ class TestRoo < Test::Unit::TestCase
   def test_openoffice_zipped
     if OPENOFFICE
       begin
-        oo = Roo::Openoffice.new(File.join(TESTDIR,"bode-v1.ods.zip"), :zip)
+        oo = Roo::OpenOffice.new(File.join(TESTDIR,"bode-v1.ods.zip"), :zip)
         assert oo
         assert_equal 'ist "e" im Nenner von H(s)', oo.cell('b', 5)
       end
@@ -737,6 +702,20 @@ class TestRoo < Test::Unit::TestCase
     end
   end
 
+  def test_find_by_row_if_header_line_is_not_nil
+    with_each_spreadsheet(:name=>'numbers1') do |oo|
+      oo.header_line = 2
+      assert_not_nil oo.header_line
+      rec = oo.find 1
+      assert rec
+      assert_equal 5, rec[0]
+      assert_equal 6, rec[1]
+      rec = oo.find 15
+      assert rec
+      assert_equal "einundvierzig", rec[0]
+    end
+  end
+
   def test_find_by_conditions
     if LONG_RUN
       with_each_spreadsheet(:name=>'Bibelbund', :format=>[:openoffice,
@@ -915,15 +894,15 @@ class TestRoo < Test::Unit::TestCase
 
   def test_excel_does_not_support_formulas
     with_each_spreadsheet(:name=>'false_encoding', :format=>:excel) do |oo|
-      assert_raise(RuntimeError) { oo.formula('a',1) }
-      assert_raise(RuntimeError) { oo.formula?('a',1) }
-      assert_raise(RuntimeError) { oo.formulas(oo.sheets.first) }
+      assert_raise(NotImplementedError) { oo.formula('a',1) }
+      assert_raise(NotImplementedError) { oo.formula?('a',1) }
+      assert_raise(NotImplementedError) { oo.formulas(oo.sheets.first) }
     end
   end
 
   def get_extension(oo)
     case oo
-    when Roo::Openoffice
+    when Roo::OpenOffice
       ".ods"
     when Roo::Excel
       ".xls"
@@ -978,40 +957,48 @@ class TestRoo < Test::Unit::TestCase
     end
   end
 
+  def test_info_doesnt_set_default_sheet
+    with_each_spreadsheet(:name=>'numbers1') do |oo|
+      oo.default_sheet = 'Sheet3'
+      oo.info
+      assert_equal 'Sheet3', oo.default_sheet
+    end
+  end
+
   def test_bug_excel_numbers1_sheet5_last_row
     with_each_spreadsheet(:name=>'numbers1', :format=>:excel) do |oo|
       oo.default_sheet = "Tabelle1"
       assert_equal 1, oo.first_row
       assert_equal 18, oo.last_row
-      assert_equal Roo::Openoffice.letter_to_number('A'), oo.first_column
-      assert_equal Roo::Openoffice.letter_to_number('G'), oo.last_column
+      assert_equal Roo::OpenOffice.letter_to_number('A'), oo.first_column
+      assert_equal Roo::OpenOffice.letter_to_number('G'), oo.last_column
       oo.default_sheet = "Name of Sheet 2"
       assert_equal 5, oo.first_row
       assert_equal 14, oo.last_row
-      assert_equal Roo::Openoffice.letter_to_number('B'), oo.first_column
-      assert_equal Roo::Openoffice.letter_to_number('E'), oo.last_column
+      assert_equal Roo::OpenOffice.letter_to_number('B'), oo.first_column
+      assert_equal Roo::OpenOffice.letter_to_number('E'), oo.last_column
       oo.default_sheet = "Sheet3"
       assert_equal 1, oo.first_row
       assert_equal 1, oo.last_row
-      assert_equal Roo::Openoffice.letter_to_number('A'), oo.first_column
-      assert_equal Roo::Openoffice.letter_to_number('BA'), oo.last_column
+      assert_equal Roo::OpenOffice.letter_to_number('A'), oo.first_column
+      assert_equal Roo::OpenOffice.letter_to_number('BA'), oo.last_column
       oo.default_sheet = "Sheet4"
       assert_equal 1, oo.first_row
       assert_equal 1, oo.last_row
-      assert_equal Roo::Openoffice.letter_to_number('A'), oo.first_column
-      assert_equal Roo::Openoffice.letter_to_number('E'), oo.last_column
+      assert_equal Roo::OpenOffice.letter_to_number('A'), oo.first_column
+      assert_equal Roo::OpenOffice.letter_to_number('E'), oo.last_column
       oo.default_sheet = "Sheet5"
       assert_equal 1, oo.first_row
       assert_equal 6, oo.last_row
-      assert_equal Roo::Openoffice.letter_to_number('A'), oo.first_column
-      assert_equal Roo::Openoffice.letter_to_number('E'), oo.last_column
+      assert_equal Roo::OpenOffice.letter_to_number('A'), oo.first_column
+      assert_equal Roo::OpenOffice.letter_to_number('E'), oo.last_column
     end
   end
 
   def test_should_raise_file_not_found_error
     if OPENOFFICE
       assert_raise(IOError) {
-        Roo::Openoffice.new(File.join('testnichtvorhanden','Bibelbund.ods'))
+        Roo::OpenOffice.new(File.join('testnichtvorhanden','Bibelbund.ods'))
       }
     end
     if EXCEL
@@ -1128,6 +1115,31 @@ Sheet 3:
     end
   end
 
+  def test_boolean_to_csv
+    with_each_spreadsheet(:name=>'boolean') do |oo|
+      Dir.mktmpdir do |tempdir|
+        csv_output = File.join(tempdir,'boolean.csv')
+        assert oo.to_csv(csv_output)
+        assert File.exists?(csv_output)
+        assert_equal "", `diff --strip-trailing-cr #{TESTDIR}/boolean.csv #{csv_output}`
+        # --strip-trailing-cr is needed because the test-file use 0A and
+        # the test on an windows box generates 0D 0A as line endings
+      end
+    end
+  end
+  def test_link_to_csv
+    with_each_spreadsheet(:name=>'link',:format=>:excel) do |oo|
+      Dir.mktmpdir do |tempdir|
+        csv_output = File.join(tempdir,'link.csv')
+        assert oo.to_csv(csv_output)
+        assert File.exists?(csv_output)
+puts `diff --strip-trailing-cr #{TESTDIR}/link.csv #{csv_output}`
+        assert_equal "", `diff --strip-trailing-cr #{TESTDIR}/link.csv #{csv_output}`
+        # --strip-trailing-cr is needed because the test-file use 0A and
+        # the test on an windows box generates 0D 0A as line endings
+      end
+    end
+  end
   def test_date_time_yaml
     with_each_spreadsheet(:name=>'time-test') do |oo|
       expected =
@@ -1203,9 +1215,9 @@ Sheet 3:
   def test_file_warning_default
     if OPENOFFICE
       assert_raises(TypeError, "test/files/numbers1.xls is not an openoffice spreadsheet") {
-        Roo::Openoffice.new(File.join(TESTDIR,"numbers1.xls"))
+        Roo::OpenOffice.new(File.join(TESTDIR,"numbers1.xls"))
       }
-      assert_raises(TypeError) { Roo::Openoffice.new(File.join(TESTDIR,"numbers1.xlsx")) }
+      assert_raises(TypeError) { Roo::OpenOffice.new(File.join(TESTDIR,"numbers1.xlsx")) }
     end
     if EXCEL
       assert_raises(TypeError) { Roo::Excel.new(File.join(TESTDIR,"numbers1.ods")) }
@@ -1219,8 +1231,8 @@ Sheet 3:
 
   def test_file_warning_error
     if OPENOFFICE
-      assert_raises(TypeError) { Roo::Openoffice.new(File.join(TESTDIR,"numbers1.xls"),false,:error) }
-      assert_raises(TypeError) { Roo::Openoffice.new(File.join(TESTDIR,"numbers1.xlsx"),false,:error) }
+      assert_raises(TypeError) { Roo::OpenOffice.new(File.join(TESTDIR,"numbers1.xls"),false,:error) }
+      assert_raises(TypeError) { Roo::OpenOffice.new(File.join(TESTDIR,"numbers1.xlsx"),false,:error) }
     end
     if EXCEL
       assert_raises(TypeError) { Roo::Excel.new(File.join(TESTDIR,"numbers1.ods"),false,:error) }
@@ -1236,12 +1248,12 @@ Sheet 3:
     if OPENOFFICE
       assert_nothing_raised(TypeError) {
         assert_raises(Zip::ZipError) {
-          Roo::Openoffice.new(File.join(TESTDIR,"numbers1.xls"),false, :warning)
+          Roo::OpenOffice.new(File.join(TESTDIR,"numbers1.xls"),false, :warning)
         }
       }
       assert_nothing_raised(TypeError) {
         assert_raises(Errno::ENOENT) {
-          Roo::Openoffice.new(File.join(TESTDIR,"numbers1.xlsx"),false, :warning)
+          Roo::OpenOffice.new(File.join(TESTDIR,"numbers1.xlsx"),false, :warning)
         }
       }
     end
@@ -1273,18 +1285,18 @@ Sheet 3:
 
   def test_file_warning_ignore
     if OPENOFFICE
-      # Files, die eigentlich Openoffice-
+      # Files, die eigentlich OpenOffice-
       # Files sind, aber die falsche Endung haben.
       # Es soll ohne Fehlermeldung oder Warnung
       # oder Abbruch die Datei geoffnet werden
 
       # xls
       assert_nothing_raised() {
-        Roo::Openoffice.new(File.join(TESTDIR,"type_openoffice.xls"),false, :ignore)
+        Roo::OpenOffice.new(File.join(TESTDIR,"type_openoffice.xls"),false, :ignore)
       }
       # xlsx
       assert_nothing_raised() {
-        Roo::Openoffice.new(File.join(TESTDIR,"type_openoffice.xlsx"),false, :ignore)
+        Roo::OpenOffice.new(File.join(TESTDIR,"type_openoffice.xlsx"),false, :ignore)
       }
     end
     if EXCEL
@@ -1401,6 +1413,9 @@ Sheet 3:
       assert_equal Date.new(1961,11,21), oo.cell('a',7)
       assert_equal Date.new(1961,11,21), oo.cell('b',7)
       assert_equal Date.new(1961,11,21), oo.cell('c',7)
+      assert_equal DateTime.new(2013,11,5,11,45,00), oo.cell('a',8)
+      assert_equal DateTime.new(2013,11,5,11,45,00), oo.cell('b',8)
+      assert_equal DateTime.new(2013,11,5,11,45,00), oo.cell('c',8)
     end
   end
 
@@ -1556,6 +1571,21 @@ Sheet 3:
      end
   end
 
+
+  def test_excel_links
+    with_each_spreadsheet(:name=>'link', :format=>:excel) do |oo|
+      assert_equal 'Google', oo.cell(1,1)
+      assert_equal 'http://www.google.com', oo.cell(1,1).url
+    end
+  end
+
+  def test_excelx_links
+    with_each_spreadsheet(:name=>'link', :format=>:excelx) do |oo|
+      assert_equal 'Google', oo.cell(1,1)
+      assert_equal 'http://www.google.com', oo.cell(1,1).url
+    end
+  end
+
   # Excel has two base date formats one from 1900 and the other from 1904.
   # There's a MS bug that 1900 base dates include an extra day due to erroneously
   # including 1900 as a leap yar.
@@ -1627,7 +1657,7 @@ Sheet 3:
   def test_compare_large_spreadsheets
     # problematisch, weil Formeln in Excel nicht unterstützt werden
     if LONG_RUN
-      qq = Roo::Openoffice.new(File.join('test',"Bibelbund.ods"))
+      qq = Roo::OpenOffice.new(File.join('test',"Bibelbund.ods"))
       with_each_spreadsheet(:name=>'Bibelbund') do |oo|
         # p "comparing Bibelbund.ods with #{oo.class}"
         oo.sheets.each do |sh|
@@ -1744,27 +1774,6 @@ Sheet 3:
      end
    end
 
-
-  def test_bug_excel_last_row_255
-    if LONG_RUN
-      local_only do
-        oo = Roo::Excel.new(File.join('..','confidential','ScienceStaff.xls'))
-        oo.default_sheet = oo.sheets.first
-        assert_equal "COMSCI", oo.cell(255,1)
-        assert_equal "lala", oo.cell(256,1)
-        assert_equal 1537, oo.last_row
-      end
-    end
-  end
-
-  def test_bug_excel_last_row_255_modified
-    local_only do
-      oo = Roo::Excel.new(File.join('..','confidential','ScienceStaff_modified.xls'))
-      oo.default_sheet = oo.sheets.first
-      assert_equal 1537, oo.last_row
-    end
-  end
-
   require 'matrix'
   def test_matrix
     with_each_spreadsheet(:name => 'matrix', :format => [:openoffice, :excel, :google]) do |oo|
@@ -1806,14 +1815,13 @@ Sheet 3:
     end
   end
 
-  def test_bug_date_mileszs
-    local_only do
-      oo = Roo::Excel.new "/home/tp/Documents/feb-sales-analysis.xls"
+  def test_matrix_specifying_sheet
+    with_each_spreadsheet(:name => 'matrix', :format => [:openoffice, :excel, :google]) do |oo|
       oo.default_sheet = oo.sheets.first
-      # 2/1/2010 A2-A6 mm/dd/yyyy
-      2.upto(6) do |i|
-        assert_equal Date.new(2010,2,1), oo.cell('A',i)
-      end
+      assert_equal Matrix[
+        [1.0, nil, 3.0],
+        [4.0, 5.0, 6.0],
+        [7.0, 8.0, nil] ], oo.to_matrix(nil, nil, nil, nil, 'Sheet3')
     end
   end
 
@@ -1852,85 +1860,6 @@ where the expected result is
       xlsx.default_sheet = xlsx.sheets.first
       assert_equal 'Teststring', xlsx.cell('a',1)
       assert_equal 'Teststring', xlsx.cell('a',2)
-    end
-  end
-
-  def test_bug_guest_list_2011_05_05
-    local_only do
-      oo = Roo::Excel.new(File.join("..","confidential","guest_list_addresses.xls"))
-      oo.default_sheet = oo.sheets.first
-      assert_equal "lalala", oo.cell('a',1) # anderer Inhalt im Spreadsheet
-      assert_equal :string, oo.celltype('a',1)
-    end
-  end
-
-  def test_bug_guest_list_2011_05_05_spreadsheet
-    local_only do
-      require 'spreadsheet'
-      book = Spreadsheet.open File.join('..','confidential','guest_list_addresses.xls')
-      sheet1 = book.worksheet 0
-      sheet1.each do |row|
-        p row[0]
-      end
-    end
-  end
-
-  # don't test it with other spreadsheet types! this was only a problem
-  # with .xlsx files
-  def test_bug_date_not_recognized_2011_05_21
-    if EXCELX
-      local_only do
-        oo = Roo::Excelx.new(File.join('..','confidential','2011-05-21_sample_date_problem.xlsx'))
-        oo.default_sheet = oo.sheets.first
-        assert_equal Date.new(2011,3,24), oo.b4
-        assert_equal Date.new(2011,3,25), oo.b5
-        assert_equal Date.new(2011,5,5), oo.b6
-        assert_equal Date.new(2012,3,23), oo.b7
-      end
-    end
-  end
-
-  def test_bug_string_as_a_date_2011_05_21_spreadsheet_only
-    if EXCEL
-      local_only do
-        require 'spreadsheet'
-        book = Spreadsheet.open File.join('..','confidential','2011-05-21_sample_type_problem.xls')
-        sheet1 = book.worksheet 0
-        sheet1.each_with_index do |row,rownum|
-          # p row[0]
-          if rownum == 2
-            assert_equal 68, row[6]
-          end
-        end
-      end
-    end
-  end
-
-  def test_bug_string_as_a_date_2011_05_21
-    if EXCEL
-      local_only do
-        oo = Roo::Excel.new(File.join('..','confidential','2011-05-21_sample_type_problem.xls'))
-        oo.default_sheet = oo.sheets.first
-        assert_equal 68, oo.g2
-        assert_equal 72, oo.g3
-        assert_equal 75, oo.g4
-        assert_equal 76, oo.g5
-        assert_equal 77, oo.g6
-        assert_equal 78, oo.g7
-      end
-    end
-  end
-
-  def test_bug_string_as_a_date_2011_05_21_saved_as_ods
-    local_only do
-      oo = Roo::Openoffice.new(File.join('..','confidential','2011-05-21_sample_type_problem.ods'))
-      oo.default_sheet = oo.sheets.first
-      assert_equal 68, oo.g2
-      assert_equal 72, oo.g3
-      assert_equal 75, oo.g4
-      assert_equal 76, oo.g5
-      assert_equal 77, oo.g6
-      assert_equal 78, oo.g7
     end
   end
 
@@ -1995,11 +1924,11 @@ where the expected result is
       # Dieses Dokument wurde mit LibreOffice angelegt.
       # Keine Ahnung, ob es damit zusammenhaengt, das diese
       # Formeln anders sind, als in der Datei formula.ods, welche
-      # mit Openoffice angelegt wurde.
-      # Bei den Openoffice-Dateien ist in diesem Feld in der XML-
+      # mit OpenOffice angelegt wurde.
+      # Bei den OpenOffice-Dateien ist in diesem Feld in der XML-
       # Datei of: als Prefix enthalten, waehrend in dieser Datei
       # irgendetwas mit oooc: als Prefix verwendet wird.
-      oo = Roo::Openoffice.new(File.join(TESTDIR,'dreimalvier.ods'))
+      oo = Roo::OpenOffice.new(File.join(TESTDIR,'dreimalvier.ods'))
       oo.default_sheet = oo.sheets.first
       assert_equal '=SUM([.A1:.D1])', oo.formula('e',1)
       assert_equal '=SUM([.A2:.D2])', oo.formula('e',2)
@@ -2016,7 +1945,7 @@ where the expected result is
 =begin
   def test_postprocessing_and_types_in_csv
     if CSV
-      oo = Csv.new(File.join(TESTDIR,'csvtypes.csv'))
+      oo = CSV.new(File.join(TESTDIR,'csvtypes.csv'))
       oo.default_sheet = oo.sheets.first
       assert_equal(1,oo.a1)
       assert_equal(:float,oo.celltype('A',1))
@@ -2031,7 +1960,7 @@ where the expected result is
 =begin
   def test_postprocessing_with_callback_function
     if CSV
-      oo = Csv.new(File.join(TESTDIR,'csvtypes.csv'))
+      oo = CSV.new(File.join(TESTDIR,'csvtypes.csv'))
       oo.default_sheet = oo.sheets.first
 
       #
@@ -2042,7 +1971,7 @@ where the expected result is
 
 =begin
   def x_123
-  class ::Csv
+  class ::CSV
     def cell_postprocessing(row,col,value)
       if row < 3
         return nil
@@ -2056,7 +1985,7 @@ where the expected result is
   def test_nil_rows_and_lines_csv
 	  # x_123
 	  if CSV
-		  oo = Roo::Csv.new(File.join(TESTDIR,'Bibelbund.csv'))
+		  oo = Roo::CSV.new(File.join(TESTDIR,'Bibelbund.csv'))
 		  oo.default_sheet = oo.sheets.first
 		  assert_equal 1, oo.first_row
 	  end
@@ -2128,7 +2057,7 @@ where the expected result is
         File.join(TESTDIR,"numbers2.ods"))
       File.cp(File.join(TESTDIR,"numbers2.ods"),
         File.join(TESTDIR,"bak_numbers2.ods"))
-      oo = Openoffice.new(File.join(TESTDIR,"numbers2.ods"))
+      oo = OpenOffice.new(File.join(TESTDIR,"numbers2.ods"))
       oo.default_sheet = oo.sheets.first
       oo.first_row.upto(oo.last_row) {|y|
         oo.first_column.upto(oo.last_column) {|x|
@@ -2140,8 +2069,8 @@ where the expected result is
       }
       oo.save
 
-      oo1 = Roo::Openoffice.new(File.join(TESTDIR,"numbers2.ods"))
-      oo2 = Roo::Openoffice.new(File.join(TESTDIR,"bak_numbers2.ods"))
+      oo1 = Roo::OpenOffice.new(File.join(TESTDIR,"numbers2.ods"))
+      oo2 = Roo::OpenOffice.new(File.join(TESTDIR,"bak_numbers2.ods"))
       #p oo2.to_s
       assert_equal 999, oo2.cell('a',1), oo2.cell('a',1)
       assert_equal oo2.cell('a',1) + 7, oo1.cell('a',1)
@@ -2159,27 +2088,6 @@ where the expected result is
     end
   end
 
-  def test_possible_bug_snowboard_borders #no test file
-    local_only do
-      if EXCEL
-        ex = Excel.new(File.join(TESTDIR,'problem.xls'))
-        ex.default_sheet = ex.sheets.first
-        assert_equal 2, ex.first_row
-        assert_equal 30, ex.last_row
-        assert_equal 'A', ex.first_column_as_letter
-        assert_equal 'J', ex.last_column_as_letter
-      end
-      if EXCELX
-        ex = Excelx.new(File.join(TESTDIR,'problem.xlsx'))
-        ex.default_sheet = ex.sheets.first
-        assert_equal 2, ex.first_row
-        assert_equal 30, ex.last_row
-        assert_equal 'A', ex.first_column_as_letter
-        assert_equal 'J', ex.last_column_as_letter
-      end
-    end
-  end
-
   def common_possible_bug_snowboard_cells(ss)
     assert_equal "A.", ss.cell(13,'A'), ss.class
     assert_equal 147, ss.cell(13,'f'), ss.class
@@ -2193,314 +2101,6 @@ where the expected result is
     assert_equal "159W", ss.cell(13,'m'), ss.class
     assert_equal "164W", ss.cell(13,'n'), ss.class
     assert_equal "168W", ss.cell(13,'o'), ss.class
-  end
-
-  def test_possible_bug_snowboard_cells # no test file
-    local_only do
-      # warten auf Bugfix in parseexcel
-      if EXCEL
-        ex = Roo::Excel.new(File.join(TESTDIR,'problem.xls'))
-        ex.default_sheet = 'Custom X'
-        common_possible_bug_snowboard_cells(ex)
-      end
-      if EXCELX
-        ex = Roo::Excelx.new(File.join(TESTDIR,'problem.xlsx'))
-        ex.default_sheet = 'Custom X'
-        common_possible_bug_snowboard_cells(ex)
-      end
-    end
-  end
-
-  if EXCELX
-    def test_possible_bug_2008_09_13
-      local_only do
-        # war nur in der 1.0.0 Release ein Fehler und sollte mit aktueller
-        # Release nicht mehr auftreten.
-=begin
-−
-  <sst count="46" uniqueCount="39">
-−
-  0<si>
-<t>Bond</t>
-<phoneticPr fontId="1" type="noConversion"/>
-</si>
-−
-  1<si>
-<t>James</t>
-<phoneticPr fontId="1" type="noConversion"/>
-</si>
-−
-  2<si>
-<t>8659</t>
-<phoneticPr fontId="1" type="noConversion"/>
-</si>
-−
-  3<si>
-<t>12B</t>
-<phoneticPr fontId="1" type="noConversion"/>
-</si>
-−
-  4<si>
-<t>087692</t>
-<phoneticPr fontId="1" type="noConversion"/>
-</si>
-−
-  5<si>
-<t>Rowe</t>
-<phoneticPr fontId="1" type="noConversion"/>
-</si>
-−
-  6<si>
-<t>Karl</t>
-<phoneticPr fontId="1" type="noConversion"/>
-</si>
-−
-  7<si>
-<t>9128</t>
-<phoneticPr fontId="1" type="noConversion"/>
-</si>
-−
-  8<si>
-<t>79A</t>
-<phoneticPr fontId="1" type="noConversion"/>
-</si>
-−
-  9<si>
-<t>Benson</t>
-<phoneticPr fontId="1" type="noConversion"/>
-</si>
-−
-  10<si>
-<t>Cedric</t>
-<phoneticPr fontId="1" type="noConversion"/>
-</si>
-−
-  11<si>
-<t>Greenstreet</t>
-<phoneticPr fontId="1" type="noConversion"/>
-</si>
-−
-  12<si>
-<t>Jenny</t>
-<phoneticPr fontId="1" type="noConversion"/>
-</si>
-−
-  13<si>
-<t>Smith</t>
-<phoneticPr fontId="1" type="noConversion"/>
-</si>
-−
-  14<si>
-<t>Greame</t>
-<phoneticPr fontId="1" type="noConversion"/>
-</si>
-−
-  15<si>
-<t>Lucas</t>
-<phoneticPr fontId="1" type="noConversion"/>
-</si>
-−
-  16<si>
-<t>Ward</t>
-<phoneticPr fontId="1" type="noConversion"/>
-</si>
-−
-  17<si>
-<t>Lee</t>
-<phoneticPr fontId="1" type="noConversion"/>
-</si>
-−
-  18<si>
-<t>Bret</t>
-<phoneticPr fontId="1" type="noConversion"/>
-</si>
-−
-  19<si>
-<t>Warne</t>
-<phoneticPr fontId="1" type="noConversion"/>
-</si>
-−
-  20<si>
-<t>Shane</t>
-<phoneticPr fontId="1" type="noConversion"/>
-</si>
-−
-  21<si>
-<t>782</t>
-<phoneticPr fontId="1" type="noConversion"/>
-</si>
-−
-  22<si>
-<t>876</t>
-<phoneticPr fontId="1" type="noConversion"/>
-</si>
-−
-  23<si>
-<t>9901</t>
-<phoneticPr fontId="1" type="noConversion"/>
-</si>
-−
-  24<si>
-<t>1235</t>
-<phoneticPr fontId="1" type="noConversion"/>
-</si>
-−
-  25<si>
-<t>16547</t>
-<phoneticPr fontId="1" type="noConversion"/>
-</si>
-−
-  26<si>
-<t>7789</t>
-<phoneticPr fontId="1" type="noConversion"/>
-</si>
-−
-  27<si>
-<t>89</t>
-<phoneticPr fontId="1" type="noConversion"/>
-</si>
-−
-  28<si>
-<t>12A</t>
-<phoneticPr fontId="1" type="noConversion"/>
-</si>
-−
-  29<si>
-<t>19A</t>
-<phoneticPr fontId="1" type="noConversion"/>
-</si>
-−
-  30<si>
-<t>256</t>
-<phoneticPr fontId="1" type="noConversion"/>
-</si>
-−
-  31<si>
-<t>129B</t>
-<phoneticPr fontId="1" type="noConversion"/>
-</si>
-−
-  32<si>
-<t>11</t>
-<phoneticPr fontId="1" type="noConversion"/>
-</si>
-−
-  33<si>
-<t>Last Name</t>
-</si>
-−
-  34<si>
-<t>First Name</t>
-</si>
-−
-35  <si>
-<t>Middle Name</t>
-</si>
-−
-  36<si>
-<t>Resident ID</t>
-</si>
-−
-  37<si>
-<t>Room Number</t>
-</si>
-−
-  38<si>
-<t>Provider ID #</t>
-</si>
-</sst>
-Hello Thomas,
-How are you doing ? I am running into this strange issue with roo plugin (1.0.0). The attached
-spreadsheet has all the cells formatted as "text", when I view in the Excel spreadsheet. But when it
-get's into roo plugin (set_cell_values method - line 299), the values for the cells 1,1, 1,2, 1,3...1,6
-show as 'date' instead of 'string'.
-Because of this my parser is failing to get the proper values from the spreadsheet. Any ideas why
-the formatting is getting set to the wrong value ?
-Even stranger is if I save this file as ".XLS" and parse it the cells parse out fine as they are treated as
-'string' instead of 'date'.
-This attached file is the newer format of Microsoft Excel (.xlsx).
-
-=end
-        xx = Roo::Excelx.new(File.join(TESTDIR,'sample_file_2008-09-13.xlsx'))
-        assert_equal 1, xx.sheets.size
-
-        assert_equal 1, xx.first_row
-        assert_equal 9, xx.last_row # 9 ist richtig. Es sind zwar 44 Zeilen definiert, aber der Rest hat keinen Inhalt
-        assert_equal 1, xx.first_column
-        assert_equal 6, xx.last_column
-        assert_equal 'A', xx.first_column_as_letter
-        assert_equal 'F', xx.last_column_as_letter
-
-        assert_nothing_raised() {
-          puts xx.info
-        }
-        p xx.cell(1,1)
-        p xx.cell(1,2)
-        p xx.cell(1,3)
-        p xx.cell(1,4)
-        p xx.cell(1,5)
-        p xx.cell(1,6)
-        xx.default_sheet = xx.sheets.first
-
-        assert_equal 'Last Name', xx.cell('A',1)
-
-        1.upto(6) do |col|
-          assert_equal :string, xx.celltype(1,col)
-        end
-        #for col in (1..6)
-        #  assert_equal "1234", xx.cell(1,col)
-        #end
-      end
-    end
-  end
-
-  #-- bei diesen Test bekomme ich seltsamerweise einen Fehler can't allocate
-  #-- memory innerhalb der zip-Routinen => erstmal deaktiviert
-  def test_huge_table_timing_10_000_openoffice #no test file
-    local_only do
-      with_each_spreadsheet(:name=>'/home/tp/ruby-test/too-testing/speedtest_10000') do |oo|
-        if LONG_RUN
-          assert_nothing_raised(Timeout::Error) {
-            Timeout::timeout(3.minutes) do |timeout_length|
-              # process every cell
-              sum = 0
-              oo.sheets.each {|sheet|
-                oo.default_sheet = sheet
-                for row in oo.first_row..oo.last_row do
-                  for col in oo.first_column..oo.last_column do
-                    c = oo.cell(row,col)
-                    sum += c.length if c
-                  end
-                end
-                p sum
-                assert sum > 0
-              }
-            end
-          }
-        end
-      end
-    end
-  end
-
-  def test_bug_encoding_exported_from_google
-    if EXCEL
-      local_only do
-        xl = Roo::Excel.new(File.join(TESTDIR,"numbers1_from_google.xls"))
-        xl.default_sheet = xl.sheets.first
-        assert_equal 'test', xl.cell(2,'F')
-      end
-    end
-  end
-
-  def test_invalid_iconv_from_ms
-    local_only do
-      #TODO: does only run within a darwin-environment
-      if RUBY_PLATFORM.downcase =~ /darwin/
-        assert_nothing_raised() {
-          Roo::Excel.new(File.join(TESTDIR,"ms.xls"))
-        }
-      end
-    end
   end
 
   # def test_false_encoding
@@ -2526,162 +2126,12 @@ This attached file is the newer format of Microsoft Excel (.xlsx).
       assert_equal "42", go.cell(1,1)
     end
   end
-  def test_bug_c2  # no test file
-    local_only do
-      with_each_spreadsheet(:name=>'problem', :foramt=>:excel) do |oo|
-        expected = ['Supermodel X','T6','Shaun White','Jeremy','Custom',
-          'Warhol','Twin','Malolo','Supermodel','Air','Elite',
-          'King','Dominant','Dominant Slick','Blunt','Clash',
-          'Bullet','Tadashi Fuse','Jussi','Royale','S-Series',
-          'Fish','Love','Feelgood ES','Feelgood','GTwin','Troop',
-          'Lux','Stigma','Feather','Stria','Alpha','Feelgood ICS']
-        result = oo.sheets[2..oo.sheets.length].map do |s|
-          #(13..13).each do |s|
-          #puts "#{name} (sheet: #{s})"
-          #assert_equal "whatever (sheet: 13)",          "#{name} (sheet: #{s})"
-          oo.default_sheet = s
-          oo.cell(2,'C')
-        end
-        assert_equal expected, result
-      end
-    end
-  end
 
-  def test_bug_c2_parseexcel #no test file
-    local_only do
-      #-- this is OK
-      @workbook = Spreadsheet::ParseExcel.parse(File.join(TESTDIR,"problem.xls"))
-      worksheet = @workbook.worksheet(11)
-      skip = 0
-      line = 1
-      row = 2
-      col = 3
-      worksheet.each(skip) { |row_par|
-        if line == row
-          if row_par == nil
-            raise "nil"
-          end
-          cell = row_par.at(col-1)
-          assert cell, "cell should not be nil"
-          assert_equal "Air", cell.to_s('utf-8')
-        end
-        line += 1
-      }
-      #-- worksheet 12 does not work
-      @workbook = Spreadsheet::ParseExcel.parse(File.join(TESTDIR,"problem.xls"))
-      worksheet = @workbook.worksheet(12)
-      skip = 0
-      line = 1
-      row = 2
-      col = 3
-      worksheet.each(skip) { |row_par|
-        if line == row
-          if row_par == nil
-            raise "nil"
-          end
-          cell = row_par.at(col-1)
-          assert cell, "cell should not be nil"
-          assert_equal "Elite", cell.to_s('utf-8')
-        end
-        line += 1
-      }
-    end
-  end
-
-  def test_bug_c2_excelx  #no test file
-    local_only do
-      expected = ['Supermodel X','T6','Shaun White','Jeremy','Custom',
-        'Warhol','Twin','Malolo','Supermodel','Air','Elite',
-        'King','Dominant','Dominant Slick','Blunt','Clash',
-        'Bullet','Tadashi Fuse','Jussi','Royale','S-Series',
-        'Fish','Love','Feelgood ES','Feelgood','GTwin','Troop',
-        'Lux','Stigma','Feather','Stria','Alpha','Feelgood ICS']
-      @e = Roo::Excelx.new(File.join(TESTDIR,"problem.xlsx"))
-      result = @e.sheets[2..@e.sheets.length].map do |s|
-        @e.default_sheet = s
-        #  assert_equal "A.",@e.cell('a',13)
-        #puts "#{name} (sheet: #{s})"
-        #assert_equal :string, @e.celltype('c',2)
-        #assert_equal "Vapor (sheet: Vapor)", "#{name} (sheet: #{@e.sheets.first})"
-        assert @e.cell(2,'c')
-        @e.cell(2,'C')
-      end
-      assert_equal expected, result
-
-      @e = Roo::Excelx.new(File.join(TESTDIR,"problem.xlsx"))
-      #@e.sheets[2..@e.sheets.length].each do |s|
-      (13..13).each do |s|
-        @e.default_sheet = s
-        name = @e.cell(2,'C')
-        #puts "#{name} (sheet: #{s})"
-        assert_equal "Elite (sheet: 13)",          "#{name} (sheet: #{s})"
-      end
-    end
-  end
-
-  def test_compare_csv_excelx_excel  #no test file
-    if EXCELX
-      # parseexcel bug
-      local_only do
-        s1 = Roo::Excel.new(File.join(TESTDIR,"problem.xls"))
-        s2 = Roo::Excelx.new(File.join(TESTDIR,"problem.xlsx"))
-        s1.sheets.each {|sh| #TODO:
-          s1.default_sheet = sh
-          s2.default_sheet = sh
-          File.delete_if_exist("/tmp/problem.csv")
-          File.delete_if_exist("/tmp/problemx.csv")
-          assert s1.to_csv("/tmp/problem.csv")
-          assert s2.to_csv("/tmp/problemx.csv")
-          assert File.exists?("/tmp/problem.csv")
-          assert File.exists?("/tmp/problemx.csv")
-          assert_equal "", `diff /tmp/problem.csv /tmp/problemx.csv`, "Unterschied in Sheet #{sh} #{s1.sheets.index(sh)}"
-        }
-      end
-    end
-  end
-
-  def test_problemx_csv_imported  #no test file
-    if EXCEL
-      local_only do
-        # wieder eingelesene CSV-Datei aus obigem Test
-        # muss identisch mit problem.xls sein
-        # Importieren aus csv-Datei muss manuell gemacht werden
-        ex = Roo::Excel.new(File.join(TESTDIR,"problem.xls"))
-        cs = Roo::Excel.new(File.join(TESTDIR,"problemx_csv_imported.xls"))
-        # nur das erste sheet betrachten
-        ex.default_sheet = ex.sheets.first
-        cs.default_sheet = cs.sheets.first
-        ex.first_row.upto(ex.last_row) do |row|
-          ex.first_column.upto(ex.last_column) do |col|
-            assert_equal ex.cell(row,col), cs.cell(row,col), "cell #{row}/#{col} does not match '#{ex.cell(row,col)}' '#{cs.cell(row,col)}'"
-            assert_equal ex.celltype(row,col), cs.celltype(row,col), "celltype #{row}/#{col} does not match"
-            assert_equal ex.empty?(row,col), cs.empty?(row,col), "empty? #{row}/#{col} does not match"
-            if defined? excel_supports_formulas
-              assert_equal ex.formula?(row,col), cs.formula?(row,col), "formula? #{row}/#{col} does not match"
-              assert_equal ex.formula(row,col), cs.formula(row,col), "formula #{row}/#{col} does not match"
-            end
-          end
-        end
-        cs.first_row.upto(cs.last_row) do |row|
-          cs.first_column.upto(cs.last_column) do |col|
-            assert_equal ex.cell(row,col), cs.cell(row,col), "cell #{row}/#{col} does not match '#{ex.cell(row,col)}' '#{cs.cell(row,col)}'"
-            assert_equal ex.celltype(row,col), cs.celltype(row,col), "celltype #{row}/#{col} does not match"
-            assert_equal ex.empty?(row,col), cs.empty?(row,col), "empty? #{row}/#{col} does not match"
-            if defined? excel_supports_formulas
-              assert_equal ex.formula?(row,col), cs.formula?(row,col), "formula? #{row}/#{col} does not match"
-              assert_equal ex.formula(row,col), cs.formula(row,col), "formula #{row}/#{col} does not match"
-            end
-          end
-        end
-      end
-    end
-  end
-
-  def test_open_from_uri
+  def test_download_uri
     if ONLINE
       if OPENOFFICE
         assert_raises(RuntimeError) {
-          Roo::Openoffice.new("http://gibbsnichtdomainxxxxx.com/file.ods")
+          Roo::OpenOffice.new("http://gibbsnichtdomainxxxxx.com/file.ods")
         }
       end
       if EXCEL
@@ -2697,11 +2147,11 @@ This attached file is the newer format of Microsoft Excel (.xlsx).
     end
   end
 
-  def test_open_from_uri_with_query_string
+  def test_download_uri_with_query_string
     dir = File.expand_path("#{File.dirname __FILE__}/files")
     { xls:  [EXCEL,       Roo::Excel],
       xlsx: [EXCELX,      Roo::Excelx],
-      ods:  [OPENOFFICE,  Roo::Openoffice]}.each do |extension, (flag, type)|
+      ods:  [OPENOFFICE,  Roo::OpenOffice]}.each do |extension, (flag, type)|
         if flag
           file = "#{dir}/simple_spreadsheet.#{extension}"
           url = "http://test.example.com/simple_spreadsheet.#{extension}?query-param=value"
@@ -2711,25 +2161,6 @@ This attached file is the newer format of Microsoft Excel (.xlsx).
           assert_equal 'Task 1', spreadsheet.cell('f', 4)
         end
       end
-  end
-
-  def test_to_ascii_openoffice #file does not exist
-    local_only do
-      with_each_spreadsheet(:name=>'verysimple_spreadsheet', :format=>:openoffice) do |oo|
-        oo.default_sheet = oo.sheets.first
-        expected="
-  A    |   B   |  C   |
-  -------+-------+------|
-      7|      8|     9|
-  -------+-------+------|
-      4|      5|     6|
-  -------+-------+------|
-      1|      2|     3|
-  ----------------------/
-        "
-        assert_equal expected, oo.to_ascii
-      end
-    end
   end
 
   # def test_soap_server
@@ -2797,10 +2228,10 @@ This attached file is the newer format of Microsoft Excel (.xlsx).
   #  arg = expression.split(':')
   #  b,z = split_coord(arg[0])
   #  first_row = z
-  #  first_col = Openoffice.letter_to_number(b)
+  #  first_col = OpenOffice.letter_to_number(b)
   #  b,z = split_coord(arg[1])
   #  last_row = z
-  #  last_col = Openoffice.letter_to_number(b)
+  #  last_col = OpenOffice.letter_to_number(b)
   #  result = 0
   #  first_row.upto(last_row) {|row|
   #    first_col.upto(last_col) {|col|
@@ -2811,7 +2242,7 @@ This attached file is the newer format of Microsoft Excel (.xlsx).
   #end
 
   #def test_dsl
-  #  s = Openoffice.new(File.join(TESTDIR,"numbers1.ods"))
+  #  s = OpenOffice.new(File.join(TESTDIR,"numbers1.ods"))
   #  s.default_sheet = s.sheets.first
   #
   #    s.set 'a',1, 5
@@ -2827,19 +2258,19 @@ This attached file is the newer format of Microsoft Excel (.xlsx).
   #  name = File.join(TESTDIR,'createdspreadsheet.ods')
   #  rm(name) if File.exists?(File.join(TESTDIR,'createdspreadsheet.ods'))
   #  # anlegen, falls noch nicht existierend
-  #  s = Openoffice.new(name,true)
+  #  s = OpenOffice.new(name,true)
   #  assert File.exists?(name)
   #end
 
   #def test_create_spreadsheet2
   #  # anlegen, falls noch nicht existierend
-  #  s = Openoffice.new(File.join(TESTDIR,"createdspreadsheet.ods"),true)
+  #  s = OpenOffice.new(File.join(TESTDIR,"createdspreadsheet.ods"),true)
   #  s.set 'a',1,42
   #  s.set 'b',1,43
   #  s.set 'c',1,44
   #  s.save
   #
-  #  t = Openoffice.new(File.join(TESTDIR,"createdspreadsheet.ods"))
+  #  t = OpenOffice.new(File.join(TESTDIR,"createdspreadsheet.ods"))
   #  assert_equal 42, t.cell(1,'a')
   #  assert_equal 43, t.cell('b',1)
   #  assert_equal 44, t.cell('c',3)
@@ -2847,7 +2278,7 @@ This attached file is the newer format of Microsoft Excel (.xlsx).
 
   # We don't have the bode-v1.xlsx test file
   # #TODO: xlsx-Datei anpassen!
-  # def test_excelx_open_from_uri_and_zipped
+  # def test_excelx_download_uri_and_zipped
   #   #TODO: gezippte xlsx Datei online zum Testen suchen
   #   if EXCELX
   #     if ONLINE
@@ -2871,5 +2302,35 @@ This attached file is the newer format of Microsoft Excel (.xlsx).
   #     assert_equal 'ist "e" im Nenner von H(s)', excel.cell('b', 5)
   #   end
   # end
+
+  def test_csv_parsing_with_headers
+    return unless CSV
+    headers = ["TITEL", "VERFASSER", "OBJEKT", "NUMMER", "SEITE", "INTERNET", "PC", "KENNUNG"]
+
+    oo = Roo::Spreadsheet.open(File.join(TESTDIR, 'Bibelbund.csv'))
+    parsed = oo.parse(:headers => true)
+    assert_equal headers, parsed[1].keys
+  end
+
+  def test_bug_numbered_sheet_names
+    with_each_spreadsheet(:name=>'bug-numbered-sheet-names', :format=>:excelx) do |oo|
+      assert_nothing_raised() { oo.each_with_pagename { } }
+    end
+  end
+
+  def test_parsing_xslx_from_numbers
+    return unless EXCELX
+    xlsx  = Roo::Excelx.new(File.join(TESTDIR, "numbers-export.xlsx"))
+
+    xlsx.default_sheet = xlsx.sheets.first
+    assert_equal 'Sheet 1', xlsx.cell('a',1)
+
+    # Another buggy behavior of Numbers 3.1: if a warkbook has more than a
+    # single sheet, all sheets except the first one will have an extra row and
+    # column added to the beginning. That's why we assert against cell B2 and
+    # not A1
+    xlsx.default_sheet = xlsx.sheets.last
+    assert_equal 'Sheet 2', xlsx.cell('b',2)
+  end
 
 end # class

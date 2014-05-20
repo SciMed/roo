@@ -1,44 +1,28 @@
 begin
-  require "google_spreadsheet"
+  require "google_drive"
 rescue LoadError => e
-  raise e, "Using Roo::Google requires the google-spreadsheet-ruby gem"
+  raise e, "Using Roo::Google requires the google_drive gem"
 end
 
-class GoogleHTTPError < RuntimeError; end
-class GoogleReadError < RuntimeError; end
-class GoogleWriteError < RuntimeError; end
-
-class Roo::Google < Roo::GenericSpreadsheet
+class Roo::Google < Roo::Base
   attr_accessor :date_format, :datetime_format
 
-  # Creates a new Google spreadsheet object.
-  def initialize(spreadsheetkey, options = {})
-    @spreadsheetkey = spreadsheetkey
+  # Creates a new Google Drive object.
+  def initialize(spreadsheet_key, options = {})
+    @filename = spreadsheet_key
     @user = options[:user] || ENV['GOOGLE_MAIL']
     @password = options[:password] || ENV['GOOGLE_PASSWORD']
+    @access_token = options[:access_token] || ENV['GOOGLE_TOKEN']
 
-    warn "user not set" if !@user || @user.empty?
-    warn "password not set" if !@password || @password.empty?
-
+    @worksheets = session.spreadsheet_by_key(@filename).worksheets
+    @sheets = @worksheets.map {|sheet| sheet.title }
+    super
     @cell = Hash.new {|h,k| h[k]=Hash.new}
     @cell_type = Hash.new {|h,k| h[k]=Hash.new}
     @formula = Hash.new
-    @first_row = Hash.new
-    @last_row = Hash.new
-    @first_column = Hash.new
-    @last_column = Hash.new
-    @cells_read = Hash.new
-    @header_line = 1
     @date_format = '%d/%m/%Y'
     @datetime_format = '%d/%m/%Y %H:%M:%S'
     @time_format = '%H:%M:%S'
-
-    session = GoogleSpreadsheet.login(@user, @password)
-    @sheets = session.spreadsheet_by_key(@spreadsheetkey).worksheets.map do |sheet|
-      sheet.title
-    end
-    @default_sheet = sheets.first
-    @worksheets = session.spreadsheet_by_key(@spreadsheetkey).worksheets
   end
 
   # returns an array of sheet names in the spreadsheet
@@ -82,7 +66,7 @@ class Roo::Google < Roo::GenericSpreadsheet
   def cell(row, col, sheet=nil)
     sheet ||= @default_sheet
     validate_sheet!(sheet) #TODO: 2007-12-16
-    read_cells(sheet) unless @cells_read[sheet]
+    read_cells(sheet)
     row,col = normalize(row,col)
     value = @cell[sheet]["#{row},#{col}"]
     if celltype(row,col,sheet) == :date
@@ -111,10 +95,10 @@ class Roo::Google < Roo::GenericSpreadsheet
   # * :datetime
   def celltype(row, col, sheet=nil)
     sheet ||= @default_sheet
-    read_cells(sheet) unless @cells_read[sheet]
+    read_cells(sheet)
     row,col = normalize(row,col)
     if @formula.size > 0 && @formula[sheet]["#{row},#{col}"]
-      return :formula
+      :formula
     else
       @cell_type[sheet]["#{row},#{col}"]
     end
@@ -125,22 +109,11 @@ class Roo::Google < Roo::GenericSpreadsheet
   # The method #formula? checks if there is a formula.
   def formula(row,col,sheet=nil)
     sheet ||= @default_sheet
-    read_cells(sheet) unless @cells_read[sheet]
+    read_cells(sheet)
     row,col = normalize(row,col)
-    if @formula[sheet]["#{row},#{col}"] == nil
-      return nil
-    else
-      return @formula[sheet]["#{row},#{col}"]
-    end
+    @formula[sheet]["#{row},#{col}"] && @formula[sheet]["#{row},#{col}"]
   end
-
-  # true, if there is a formula
-  def formula?(row,col,sheet=nil)
-    sheet ||= @default_sheet
-    read_cells(sheet) unless @cells_read[sheet]
-    row,col = normalize(row,col)
-    formula(row,col) != nil
-  end
+  alias_method :formula?, :formula
 
   # true, if the cell is empty
   def empty?(row, col, sheet=nil)
@@ -165,8 +138,8 @@ class Roo::Google < Roo::GenericSpreadsheet
     if @cells_read[sheet]
       value, value_type = determine_datatype(value.to_s)
 
-      _set_value(col,row,value,sheet)
-      set_type(col,row,value_type,sheet)
+      _set_value(row,col,value,sheet)
+      set_type(row,col,value_type,sheet)
     end
   end
 
@@ -236,6 +209,8 @@ class Roo::Google < Roo::GenericSpreadsheet
   def read_cells(sheet=nil)
     sheet ||= @default_sheet
     validate_sheet!(sheet)
+    return if @cells_read[sheet]
+
     sheet_no = sheets.index(sheet)
     ws = @worksheets[sheet_no]
     for row in 1..ws.num_rows
@@ -301,4 +276,17 @@ class Roo::Google < Roo::GenericSpreadsheet
     return rows.min, rows.max, cols.min, cols.max
   end
 
-end # class
+  def reinitialize
+    initialize(@filename, user: @user, password: @password, access_token: @access_token)
+  end
+
+  def session
+    @session ||= if @user && @password
+                   GoogleDrive.login(@user, @password)
+                 elsif @access_token
+                   GoogleDrive.login_with_oauth(@access_token)
+                 else
+                   warn 'set user and password or access token'
+                 end
+  end
+end

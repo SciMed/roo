@@ -1,32 +1,24 @@
 require 'csv'
 require 'time'
 
-# The Csv class can read csv files (must be separated with commas) which then
+# The CSV class can read csv files (must be separated with commas) which then
 # can be handled like spreadsheets. This means you can access cells like A5
 # within these files.
-# The Csv class provides only string objects. If you want conversions to other
+# The CSV class provides only string objects. If you want conversions to other
 # types you have to do it yourself.
 #
 # You can pass options to the underlying CSV parse operation, via the
 # :csv_options option.
 #
 
-class Roo::Csv < Roo::GenericSpreadsheet
+class Roo::CSV < Roo::Base
   def initialize(filename, options = {})
-    @filename = filename
-    @options = options
-    @cell = {}
-    @cell_type = {}
-    @cells_read = {}
-    @first_row = {}
-    @last_row = {}
-    @first_column = {}
-    @last_column = {}
+    super
   end
 
   attr_reader :filename
 
-  # Returns an array with the names of the sheets. In Csv class there is only
+  # Returns an array with the names of the sheets. In CSV class there is only
   # one dummy sheet, because a csv file cannot have more than one sheet.
   def sheets
     ['default']
@@ -34,16 +26,14 @@ class Roo::Csv < Roo::GenericSpreadsheet
 
   def cell(row, col, sheet=nil)
     sheet ||= @default_sheet
-    read_cells(sheet) unless @cells_read[sheet]
-    row,col = normalize(row,col)
-    @cell[[row,col]]
+    read_cells(sheet)
+    @cell[normalize(row,col)]
   end
 
   def celltype(row, col, sheet=nil)
     sheet ||= @default_sheet
-    read_cells(sheet) unless @cells_read[sheet]
-    row,col = normalize(row,col)
-    @cell_type[[row,col]]
+    read_cells(sheet)
+    @cell_type[normalize(row,col)]
   end
 
   def cell_postprocessing(row,col,value)
@@ -67,27 +57,26 @@ class Roo::Csv < Roo::GenericSpreadsheet
     TYPE_MAP[value.class]
   end
 
-  def data
-    @data ||=
+  def each_row(options, &block)
+    if uri?(filename)
       make_tmpdir do |tmpdir|
-        File.open(
-          uri?(filename) ?
-            open_from_uri(filename, tmpdir) :
-            filename
-        ) { |f| f.read }
+        tmp_filename = download_uri(filename, tmpdir)
+        CSV.foreach(tmp_filename, options, &block)
       end
+    else
+      CSV.foreach(filename, options, &block)
+    end
   end
 
   def read_cells(sheet=nil)
     sheet ||= @default_sheet
-    @cell_type = {} unless @cell_type
-    @cell = {} unless @cell
+    return if @cells_read[sheet]
     @first_row[sheet] = 1
     @last_row[sheet] = 0
     @first_column[sheet] = 1
     @last_column[sheet] = 1
     rownum = 1
-    CSV.parse data, csv_options do |row|
+    each_row csv_options do |row|
       row.each_with_index do |elem,i|
         @cell[[rownum,i+1]] = cell_postprocessing rownum,i+1, elem
         @cell_type[[rownum,i+1]] = celltype_class @cell[[rownum,i+1]]
@@ -121,4 +110,4 @@ class Roo::Csv < Roo::GenericSpreadsheet
       @last_column[sheet] -= 1
     end
   end
-end # class Csv
+end

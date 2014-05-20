@@ -1,10 +1,10 @@
 # -*- encoding: utf-8 -*-
 require File.dirname(__FILE__) + '/test_helper'
 
-class TestGenericSpreadsheet < Test::Unit::TestCase
+class TestBase < Test::Unit::TestCase
 
   def setup
-    @klass = Class.new(Roo::GenericSpreadsheet) do
+    @klass = Class.new(Roo::Base) do
       def initialize(filename='some_file')
         super
         @filename = filename
@@ -32,73 +32,73 @@ class TestGenericSpreadsheet < Test::Unit::TestCase
     setup_test_sheet(@oo)
   end
 
-  context 'Roo::GenericSpreadsheet.letter_to_number(letter)' do
+  context 'Roo::Base.letter_to_number(letter)' do
     should "give us 1 for 'A' and 'a'" do
-      assert_equal 1, Roo::GenericSpreadsheet.letter_to_number('A')
-      assert_equal 1, Roo::GenericSpreadsheet.letter_to_number('a')
+      assert_equal 1, Roo::Base.letter_to_number('A')
+      assert_equal 1, Roo::Base.letter_to_number('a')
     end
 
     should "give us the correct value for 'Z'" do
-      assert_equal 26, Roo::GenericSpreadsheet.letter_to_number('Z')
+      assert_equal 26, Roo::Base.letter_to_number('Z')
     end
 
     should "give us the correct value for 'AA' regardless of case mixing" do
-      assert_equal 27, Roo::GenericSpreadsheet.letter_to_number('AA')
-      assert_equal 27, Roo::GenericSpreadsheet.letter_to_number('aA')
-      assert_equal 27, Roo::GenericSpreadsheet.letter_to_number('Aa')
-      assert_equal 27, Roo::GenericSpreadsheet.letter_to_number('aa')
+      assert_equal 27, Roo::Base.letter_to_number('AA')
+      assert_equal 27, Roo::Base.letter_to_number('aA')
+      assert_equal 27, Roo::Base.letter_to_number('Aa')
+      assert_equal 27, Roo::Base.letter_to_number('aa')
     end
 
     should "give us the correct value for 'AB'" do
-      assert_equal 28, Roo::GenericSpreadsheet.letter_to_number('AB')
+      assert_equal 28, Roo::Base.letter_to_number('AB')
     end
 
     should "give us the correct value for 'AZ'" do
-      assert_equal 26*2, Roo::GenericSpreadsheet.letter_to_number('AZ')
+      assert_equal 26*2, Roo::Base.letter_to_number('AZ')
     end
 
     should "give us the correct value for 'BZ'" do
-      assert_equal 26*3, Roo::GenericSpreadsheet.letter_to_number('BZ')
+      assert_equal 26*3, Roo::Base.letter_to_number('BZ')
     end
 
     should "give us the correct value for 'ZZ'" do
-      assert_equal 26**2 + 26,Roo::GenericSpreadsheet.letter_to_number('ZZ')
+      assert_equal 26**2 + 26,Roo::Base.letter_to_number('ZZ')
     end
   end
 
-  context "Roo::GenericSpreadsheet.number_to_letter" do
-    Roo::GenericSpreadsheet::LETTERS.each_with_index do |l,i|
+  context "Roo::Base.number_to_letter" do
+    Roo::Base::LETTERS.each_with_index do |l,i|
       should "return '#{l}' when passed #{i+1}" do
-        assert_equal l,Roo::GenericSpreadsheet.number_to_letter(i+1)
+        assert_equal l,Roo::Base.number_to_letter(i+1)
       end
     end
 
     should "return 'AA' when passed 27" do
-      assert_equal 'AA',Roo::GenericSpreadsheet.number_to_letter(27)
+      assert_equal 'AA',Roo::Base.number_to_letter(27)
     end
 
     should "return 'AZ' when passed #{26*2}" do
-      assert_equal 'AZ', Roo::GenericSpreadsheet.number_to_letter(26*2)
+      assert_equal 'AZ', Roo::Base.number_to_letter(26*2)
     end
 
     should "return 'BZ' when passed #{26*3}" do
-      assert_equal 'BZ', Roo::GenericSpreadsheet.number_to_letter(26*3)
+      assert_equal 'BZ', Roo::Base.number_to_letter(26*3)
     end
 
     should "return 'ZZ' when passed #{26**2 + 26}" do
-      assert_equal 'ZZ',Roo::GenericSpreadsheet.number_to_letter(26**2 + 26)
+      assert_equal 'ZZ',Roo::Base.number_to_letter(26**2 + 26)
     end
 
     should "return 'AAA' when passed #{26**2 + 27}" do
-      assert_equal 'AAA',Roo::GenericSpreadsheet.number_to_letter(26**2 + 27)
+      assert_equal 'AAA',Roo::Base.number_to_letter(26**2 + 27)
     end
 
     should "return 'ZZZ' when passed #{26**3 + 26**2 + 26}" do
-      assert_equal 'ZZZ',Roo::GenericSpreadsheet.number_to_letter(26**3 + 26**2 + 26)
+      assert_equal 'ZZZ',Roo::Base.number_to_letter(26**3 + 26**2 + 26)
     end
 
     should "return the correct letter when passed a Float" do
-      assert_equal 'A',Roo::GenericSpreadsheet.number_to_letter(1.0)
+      assert_equal 'A',Roo::Base.number_to_letter(1.0)
     end
   end
 
@@ -174,56 +174,62 @@ class TestGenericSpreadsheet < Test::Unit::TestCase
   def test_to_csv
     assert_equal expected_csv,@oo.to_csv
   end
+
+  def test_to_csv_with_separator
+    assert_equal expected_csv_with_semicolons,@oo.to_csv(nil, nil, ';')
+  end
 protected
   def setup_test_sheet(workbook=nil)
     workbook ||= @oo
-    %w{sheet_values sheet_types cells_read}.each do |meth|
-      send("set_#{meth}".to_sym,workbook)
-    end
+    set_sheet_values(workbook)
+    set_sheet_types(workbook)
+    set_cells_read(workbook)
   end
 
   def set_sheet_values(workbook)
-    vals = workbook.instance_variable_get(:@cell)
-    vals[workbook.default_sheet][[5,1]] = Date.civil(1961,11,21).to_s
+    workbook.instance_variable_get(:@cell)[workbook.default_sheet] = {
+      [5,1] => Date.civil(1961,11,21).to_s,
 
-    vals[workbook.default_sheet][[8,3]] = "thisisc8"
-    vals[workbook.default_sheet][[8,7]] = "thisisg8"
+      [8,3] => "thisisc8",
+      [8,7] => "thisisg8",
 
-    vals[workbook.default_sheet][[12,1]] = 41.0
-    vals[workbook.default_sheet][[12,2]] = 42.0
-    vals[workbook.default_sheet][[12,3]] = 43.0
-    vals[workbook.default_sheet][[12,4]] = 44.0
-    vals[workbook.default_sheet][[12,5]] = 45.0
+      [12,1] => 41.0,
+      [12,2] => 42.0,
+      [12,3] => 43.0,
+      [12,4] => 44.0,
+      [12,5] => 45.0,
 
-    vals[workbook.default_sheet][[15,3]] = 43.0
-    vals[workbook.default_sheet][[15,4]] = 44.0
-    vals[workbook.default_sheet][[15,5]] = 45.0
+      [15,3] => 43.0,
+      [15,4] => 44.0,
+      [15,5] => 45.0,
 
-    vals[workbook.default_sheet][[16,3]] = "dreiundvierzig"
-    vals[workbook.default_sheet][[16,4]] = "vierundvierzig"
-    vals[workbook.default_sheet][[16,5]] = "fuenfundvierzig"
+      [16,3] => "dreiundvierzig",
+      [16,4] => "vierundvierzig",
+      [16,5] => "fuenfundvierzig"
+    }
   end
 
   def set_sheet_types(workbook)
-    types = workbook.instance_variable_get(:@cell_type)
-    types[workbook.default_sheet][[5,1]] = :date
+    workbook.instance_variable_get(:@cell_type)[workbook.default_sheet] = {
+      [5,1] => :date,
 
-    types[workbook.default_sheet][[8,3]] = :string
-    types[workbook.default_sheet][[8,7]] = :string
+      [8,3] => :string,
+      [8,7] => :string,
 
-    types[workbook.default_sheet][[12,1]] = :float
-    types[workbook.default_sheet][[12,2]] = :float
-    types[workbook.default_sheet][[12,3]] = :float
-    types[workbook.default_sheet][[12,4]] = :float
-    types[workbook.default_sheet][[12,5]] = :float
+      [12,1] => :float,
+      [12,2] => :float,
+      [12,3] => :float,
+      [12,4] => :float,
+      [12,5] => :float,
 
-    types[workbook.default_sheet][[15,3]] = :float
-    types[workbook.default_sheet][[15,4]] = :float
-    types[workbook.default_sheet][[15,5]] = :float
+      [15,3] => :float,
+      [15,4] => :float,
+      [15,5] => :float,
 
-    types[workbook.default_sheet][[16,3]] = :string
-    types[workbook.default_sheet][[16,4]] = :string
-    types[workbook.default_sheet][[16,5]] = :string
+      [16,3] => :string,
+      [16,4] => :string,
+      [16,5] => :string,
+    }
   end
 
   def set_first_row(workbook)
@@ -253,5 +259,8 @@ protected
 
   def expected_csv
     ",,,,,,\n,,,,,,\n,,,,,,\n,,,,,,\n1961-11-21,,,,,,\n,,,,,,\n,,,,,,\n,,\"thisisc8\",,,,\"thisisg8\"\n,,,,,,\n,,,,,,\n,,,,,,\n41,42,43,44,45,,\n,,,,,,\n,,,,,,\n,,43,44,45,,\n,,\"dreiundvierzig\",\"vierundvierzig\",\"fuenfundvierzig\",,\n"
+  end
+  def expected_csv_with_semicolons
+    expected_csv.gsub /\,/, ';' 
   end
 end
