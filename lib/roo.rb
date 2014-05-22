@@ -23,7 +23,7 @@ module Roo
 
   autoload :Spreadsheet,  'roo/spreadsheet'
   autoload :Base,         'roo/base'
-
+  autoload :Formatting,   'roo/formatting'
   autoload :OpenOffice,   'roo/openoffice'
   autoload :LibreOffice,  'roo/openoffice'
   autoload :Excel,        'roo/excel'
