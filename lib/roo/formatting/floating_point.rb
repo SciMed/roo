@@ -6,7 +6,12 @@ module Roo
         format_split = format_string.split('.')
         matches = /(?<precision>\d*).*/.match(format_split[1])
 
-        precision = matches['precision'].length
+        precision =
+          if matches
+            matches['precision'].length
+          else
+            2
+          end
 
         @format = "%#.#{precision}f"
       end

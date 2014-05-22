@@ -2,9 +2,11 @@ require 'spec_helper'
 
 describe Roo::Formatting::FormatTypeFactory do
   describe '.from_string' do
+    it 'handles guessing for general formatting' do
+      expect(described_class.from_string('General', {})).to be_a Roo::Formatting::General
+    end
     it 'handles floating point type formats' do
       floating_point_formats = {
-        'General' => Roo::Formatting::FloatingPoint,
         '0.00' => Roo::Formatting::FloatingPoint,
         '#,##0.00' => Roo::Formatting::FloatingPoint,
         '0.00E+00' => Roo::Formatting::FloatingPoint,
@@ -14,7 +16,6 @@ describe Roo::Formatting::FormatTypeFactory do
         '@' => Roo::Formatting::FloatingPoint,
       }
       floating_point_formats.each do |format_string, type_class|
-        pp
         expect(described_class.from_string(format_string, {})).to be_a type_class
       end
     end
@@ -60,6 +61,7 @@ describe Roo::Formatting::FormatTypeFactory do
         'dd/mmm/yy' => Roo::Formatting::Date,
         'yyyy-mm-dd' => Roo::Formatting::Date,
         'yyyy-mm-dd;@' => Roo::Formatting::Date,
+        '[$-409]dd\-mmm\-yy;@' => Roo::Formatting::Date
       }
       date_formats.each do |format_string, type_class|
         expect(described_class.from_string(format_string, {})).to be_a type_class

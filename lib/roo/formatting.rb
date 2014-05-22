@@ -1,4 +1,5 @@
 require_relative 'formatting/format_type'
+require_relative 'formatting/format_guesser'
 require_relative 'formatting/abstract_time_type'
 require_relative 'formatting/general'
 require_relative 'formatting/date'
@@ -11,6 +12,7 @@ require_relative 'formatting/string'
 require_relative 'formatting/floating_point'
 require_relative 'formatting/percent'
 require_relative 'formatting/format_type_factory'
+
 module Roo
 
   module Formatting
