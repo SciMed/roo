@@ -44,7 +44,7 @@ describe Roo::Formatting do
       '#0_);[Red]\(0\)' => :integer
     }.each do |format, type|
       it "translates #{format} to #{type}" do
-        expect(Roo::Formatting.format_type(format).type_symbol).to eql type
+        expect(Roo::Formatting.format_type(format, Date.parse('1900-01-01')).type_symbol).to eql type
       end
     end
   end
