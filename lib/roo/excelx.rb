@@ -3,66 +3,6 @@ require 'nokogiri'
 require 'spreadsheet'
 
 class Roo::Excelx < Roo::Base
-  module Format
-    EXCEPTIONAL_FORMATS = {
-      'h:mm am/pm' => :time,
-      'h:mm:ss am/pm' => :time,
-    }
-
-    STANDARD_FORMATS = {
-      0 => 'General',
-      1 => '0',
-      2 => '0.00',
-      3 => '#,##0',
-      4 => '#,##0.00',
-      9 => '0%',
-      10 => '0.00%',
-      11 => '0.00E+00',
-      12 => '# ?/?',
-      13 => '# ??/??',
-      14 => 'mm-dd-yy',
-      15 => 'd-mmm-yy',
-      16 => 'd-mmm',
-      17 => 'mmm-yy',
-      18 => 'h:mm AM/PM',
-      19 => 'h:mm:ss AM/PM',
-      20 => 'h:mm',
-      21 => 'h:mm:ss',
-      22 => 'm/d/yy h:mm',
-      37 => '#,##0 ;(#,##0)',
-      38 => '#,##0 ;[Red](#,##0)',
-      39 => '#,##0.00;(#,##0.00)',
-      40 => '#,##0.00;[Red](#,##0.00)',
-      45 => 'mm:ss',
-      46 => '[h]:mm:ss',
-      47 => 'mmss.0',
-      48 => '##0.0E+0',
-      49 => '@',
-    }
-
-    def to_type(format)
-      format = format.to_s.downcase
-      if type = EXCEPTIONAL_FORMATS[format]
-        type
-      elsif format.include?('#')
-        :float
-      elsif !format.match(/d+(?![\]])/).nil? || format.include?('y')
-        if format.include?('h') || format.include?('s')
-          :datetime
-        else
-          :date
-        end
-      elsif format.include?('h') || format.include?('s')
-        :time
-      elsif format.include?('%')
-        :percentage
-      else
-        :float
-      end
-    end
-
-    module_function :to_type
-  end
 
   # initialization and opening of a spreadsheet file
   # values for packed: :zip
@@ -175,15 +115,15 @@ class Roo::Excelx < Roo::Base
     attr_accessor :bold, :italic, :underline
 
     def bold?
-      @bold == true
+      !!@bold
     end
 
     def italic?
-      @italic == true
+      !!@italic
     end
 
     def underline?
-      @underline == true
+      !!@underline
     end
   end
 
@@ -346,39 +286,39 @@ class Roo::Excelx < Roo::Base
   end
 
   # helper function to set the internal representation of cells
-  def set_cell_values(sheet,x,y,i,v,value_type,formula,
-      excelx_type=nil,
-      excelx_value=nil,
-      s_attribute=nil)
-    key = [y,x+i]
+  def set_cell_values(
+    sheet,
+    x_coordinate,
+    y_coordinate,
+    i,
+    value,
+    format_type,
+    formula,
+    excelx_type=nil,
+    excelx_value=nil,
+    s_attribute=nil
+  )
+    key = [y_coordinate,x_coordinate+i]
     @cell_type[sheet] ||= {}
-    @cell_type[sheet][key] = value_type
+    @cell_type[sheet][key] = @options[:untyped] ? :string : format_type.type_symbol
     @formula[sheet] ||= {}
     @formula[sheet][key] = formula  if formula
     @cell[sheet] ||= {}
-    @cell[sheet][key] =
-      case @cell_type[sheet][key]
-      when :float
-        v.to_f
-      when :string
-        v
-      when :date
-        (base_date+v.to_i).strftime("%Y-%m-%d")
-      when :datetime
-        (base_date+v.to_f.round(6)).strftime("%Y-%m-%d %H:%M:%S.%N")
-      when :percentage
-        v.to_f
-      when :time
-        (base_date+v.to_f).strftime("%H:%M:%S")
-      else
-        v
-      end
 
-    @cell[sheet][key] = Spreadsheet::Link.new(@hyperlink[sheet][key], @cell[sheet][key].to_s) if hyperlink?(y,x+i)
+
+
+    value = format_type.cast_value(value)
+
+    @cell[sheet][key] = @options[:untyped] ? value.to_s : value
+
+    @cell[sheet][key] = Spreadsheet::Link.new(@hyperlink[sheet][key], @cell[sheet][key].to_s) if hyperlink?(y_coordinate,x_coordinate+i)
+
     @excelx_type[sheet] ||= {}
     @excelx_type[sheet][key] = excelx_type
+
     @excelx_value[sheet] ||= {}
     @excelx_value[sheet][key] = excelx_value
+
     @s_attribute[sheet] ||= {}
     @s_attribute[sheet][key] = s_attribute
   end
@@ -388,89 +328,74 @@ class Roo::Excelx < Roo::Base
     sheet ||= @default_sheet
     validate_sheet!(sheet)
     return if @cells_read[sheet]
+    @sheet_doc[sheets.index(sheet)].xpath("/xmlns:worksheet/xmlns:sheetData/xmlns:row/xmlns:c").each do |cell_node|
+      # c: <c r="A5" s="2">
+      # <v>22606</v>
+      # </c>, format: , tmp_type: float
 
-    @sheet_doc[sheets.index(sheet)].xpath("/xmlns:worksheet/xmlns:sheetData/xmlns:row/xmlns:c").each do |c|
-      s_attribute = c['s'].to_i   # should be here
+      s_attribute = cell_node['s'].to_i   # should be here
 
-
-      value_type = if @options[:untyped]
-                     :string
-                   else
-                     # c: <c r="A5" s="2">
-                     # <v>22606</v>
-                     # </c>, format: , tmp_type: float
-                     case c['t']
-                       when 's'
-                         :shared
-                       when 'b'
-                         :boolean
-                       # 2011-02-25 BEGIN
-                       when 'str'
-                         :string
-                       # 2011-02-25 END
-                       # 2011-09-15 BEGIN
-                       when 'inlineStr'
-                         :inlinestr
-                       # 2011-09-15 END
-                       else
-                         format = attribute2format(s_attribute)
-                         Format.to_type(format)
-                     end
-                   end
+      format_type =
+        case cell_node['t']
+          when 's'
+            Roo::Formatting::String.new(:shared)
+          when 'b'
+            Roo::Formatting::Boolean.new
+          when 'str'
+            Roo::Formatting::String.new
+          when 'inlineStr'
+            Roo::Formatting::String.new(:inlinestr)
+          else
+            format = attribute2format(s_attribute)
+            Roo::Formatting.format_type(format, base_date)
+        end
 
       formula = nil
-      c.children.each do |cell|
-        case cell.name
+      cell_node.children.each do |child_node|
+        case child_node.name
         when 'is'
-          cell.children.each do |is|
-            if is.name == 't'
-              inlinestr_content = is.content
-              value_type = :string
-              v = inlinestr_content
+          child_node.children.each do |inline_string_node|
+            if inline_string_node.name == 't'
+              value = inline_string_node.content
+              excelx_value = value
+              format_type = Roo::Formatting::String.new
               excelx_type = :string
-              y, x = Roo::Base.split_coordinate(c['r'])
-              excelx_value = inlinestr_content #cell.content
-              set_cell_values(sheet,x,y,0,v,value_type,formula,excelx_type,excelx_value,s_attribute)
+              y, x = Roo::Base.split_coordinate(cell_node['r'])
+              set_cell_values(sheet,x,y,0,value,format_type,formula,excelx_type,excelx_value,s_attribute)
             end
           end
         when 'f'
-          formula = cell.content
+          formula = child_node.content
         when 'v'
-          if [:time, :datetime].include?(value_type) && cell.content.to_f >= 1.0
-            value_type =
-              if (cell.content.to_f - cell.content.to_f.floor).abs > 0.000001
-                :datetime
+          if [:time, :datetime].include?(format_type.type_symbol) && child_node.content.to_f >= 1.0
+            format_type =
+              if (child_node.content.to_f - child_node.content.to_f.floor).abs > 0.000001
+                Roo::Formatting::DateTime.new
               else
-                :date
+                Roo::Formatting::Date.new
               end
           end
+
           excelx_type = [:numeric_or_formula,format.to_s]
-          excelx_value = cell.content
-          v =
-            case value_type
+          excelx_value = child_node.content
+
+          guessed_value =
+            case format_type.type_symbol
             when :shared
-              value_type = :string
+              format_type = Roo::Formatting::String.new
               excelx_type = :string
-              @shared_table[cell.content.to_i]
-            when :boolean
-              (cell.content.to_i == 1 ? 'TRUE' : 'FALSE')
-            when :date
-              cell.content
-            when :time
-              cell.content
-            when :datetime
-              cell.content
+              @shared_table[child_node.content.to_i]
             when :formula
-              cell.content.to_f #TODO: !!!!
+              child_node.content.to_f #TODO: !!!!
             when :string
               excelx_type = :string
-              cell.content
+              child_node.content
             else
-              value_type = :float
-              cell.content
+              child_node.content
             end
-          y, x = Roo::Base.split_coordinate(c['r'])
-          set_cell_values(sheet,x,y,0,v,value_type,formula,excelx_type,excelx_value,s_attribute)
+          y, x = Roo::Base.split_coordinate(cell_node['r'])
+
+          set_cell_values(sheet,x,y,0,guessed_value,format_type,formula,excelx_type,excelx_value,s_attribute)
         end
       end
     end
@@ -647,14 +572,14 @@ Datei xl/comments1.xml
   def read_styles(doc)
     @cellXfs = []
 
-    @numFmts = Hash[doc.xpath("//xmlns:numFmt").map do |numFmt|
-      [numFmt['numFmtId'], numFmt['formatCode']]
+    @numFmts = Hash[doc.xpath("//xmlns:numFmt").map do |number_format_node|
+      [number_format_node['numFmtId'], number_format_node['formatCode']]
     end]
-    fonts = doc.xpath("//xmlns:fonts/xmlns:font").map do |font_el|
+    fonts = doc.xpath("//xmlns:fonts/xmlns:font").map do |font_node|
       Font.new.tap do |font|
-        font.bold = !font_el.xpath('./xmlns:b').empty?
-        font.italic = !font_el.xpath('./xmlns:i').empty?
-        font.underline = !font_el.xpath('./xmlns:u').empty?
+        font.bold = !font_node.xpath('./xmlns:b').empty?
+        font.italic = !font_node.xpath('./xmlns:i').empty?
+        font.underline = !font_node.xpath('./xmlns:u').empty?
       end
     end
 
@@ -669,7 +594,7 @@ Datei xl/comments1.xml
   # convert internal excelx attribute to a format
   def attribute2format(s)
     id = @cellXfs[s.to_i]
-    @numFmts[id] || Format::STANDARD_FORMATS[id.to_i]
+    @numFmts[id] || Roo::Formatting::STANDARD_FORMATS[id.to_i]
   end
 
   def base_date
