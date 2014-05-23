@@ -19,6 +19,8 @@ describe Roo::Formatting do
       'mmm-yy' => :date,
       'h:mm AM/PM' => :time,
       'h:mm:ss AM/PM' => :time,
+      'h:mm am/pm' => :time,
+      'h:mm:ss am/pm' => :time,
       'h:mm' => :time,
       'h:mm:ss' => :time,
       'm/d/yy h:mm' => :datetime,
