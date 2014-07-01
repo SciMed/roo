@@ -83,7 +83,9 @@ class Roo::Excelx < Roo::Base
     elsif celltype(row,col,sheet) == :datetime
       return create_datetime_from( @cell[sheet][[row,col]] )
     end
-    @cell[sheet][[row,col]]
+    value = @cell[sheet][[row,col]]
+    value = '' if @options[:untyped] && !value
+    value
   end
 
   # Returns the formula at (row,col).
@@ -308,7 +310,6 @@ class Roo::Excelx < Roo::Base
 
 
     value = format_type.cast_value(value)
-
     @cell[sheet][key] = @options[:untyped] ? value.to_s : value
 
     @cell[sheet][key] = Spreadsheet::Link.new(@hyperlink[sheet][key], @cell[sheet][key].to_s) if hyperlink?(y_coordinate,x_coordinate+i)

@@ -83,6 +83,24 @@ describe Roo::Excelx do
         end
       end
     end
+    context 'empty cell' do
+      context 'typed parsing' do
+        it 'returns nil' do
+          spreadsheet = Roo::Excelx.new('test/files/xlsx_test.xlsx')
+
+          l1 = spreadsheet.cell('L', 1)
+          expect(l1).to be_nil
+        end
+      end
+      context 'untyped parsing' do
+        it 'returns an empty string' do
+          spreadsheet = Roo::Excelx.new('test/files/xlsx_test.xlsx', :untyped => true)
+
+          l1 = spreadsheet.cell('L', 1)
+          expect(l1).to eql ''
+        end
+      end
+    end
     context 'for a number cell' do
       context 'typed parsing' do
         it 'returns a number for numeric fields' do
