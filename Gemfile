@@ -1,7 +1,7 @@
 source 'http://rubygems.org'
 
 gem 'spreadsheet', '> 0.6.4'
-gem 'nokogiri'
+gem 'nokogiri', '~> 1.5.11'
 gem 'rubyzip'
 # gem 'google-spreadsheet-ruby'
 
