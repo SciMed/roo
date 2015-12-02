@@ -336,7 +336,7 @@ class Roo::Excel < Roo::Base
   def read_cell(row, idx)
     cell = read_cell_content(row, idx)
     case cell
-    when Float, Integer, Fixnum, Bignum
+    when Float, Integer, Fixnum, Bignum, Rational
       value_type = :float
       value = cell.to_f
     when Spreadsheet::Link

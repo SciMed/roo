@@ -763,7 +763,7 @@ class Roo::Base
           unless onecell.empty?
             %{"#{onecell.gsub(/"/,'""')}"}
           end
-        when Float
+        when Float, Rational
           if onecell == onecell.to_i
             onecell.to_i.to_s
           else

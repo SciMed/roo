@@ -49,6 +49,7 @@ class Roo::CSV < Roo::Base
   TYPE_MAP = {
     String => :string,
     Float => :float,
+    Rational => :float,
     Date => :date,
     DateTime => :datetime,
   }
