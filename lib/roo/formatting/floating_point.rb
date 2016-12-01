@@ -18,7 +18,7 @@ module Roo
 
       def cast_value(value)
         format = @format || calculate_format(value)
-        sprintf(@format, value).to_f
+        sprintf(format, value).to_f
       end
 
       def calculate_format(value)
