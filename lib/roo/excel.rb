@@ -139,7 +139,7 @@ class Roo::Excel < Roo::Base
 
   # converts name of a sheet to index (0,1,2,..)
   def sheet_no(name)
-    return name-1 if name.kind_of?(Fixnum)
+    return name-1 if name.kind_of?(Integer)
     i = 0
     @workbook.worksheets.each do |worksheet|
       return i if name == normalize_string(worksheet.name)
@@ -341,7 +341,7 @@ class Roo::Excel < Roo::Base
       value      = cell.to_s
     else
       case cell
-      when Float, Integer, Fixnum, Bignum
+      when Float, Integer
         value_type = :float
         value = cell.to_f
       when Spreadsheet::Link

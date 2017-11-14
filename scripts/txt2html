@@ -9,16 +9,20 @@ require File.dirname(__FILE__) + '/../lib/roo/version.rb'
 version  = Roo::VERSION::STRING
 download = 'http://rubyforge.org/projects/roo'
 
-class Fixnum
+class Integer
   def ordinal
     # teens
     return 'th' if (10..19).include?(self % 100)
     # others
     case self % 10
-    when 1: return 'st'
-    when 2: return 'nd'
-    when 3: return 'rd'
-    else    return 'th'
+    when 1
+      'st'
+    when 2
+      'nd'
+    when 3
+      'rd'
+    else
+      'th'
     end
   end
 end
@@ -36,7 +40,7 @@ end
 if ARGV.length >= 1
   src, template = ARGV
   template ||= File.dirname(__FILE__) + '/../website/template.rhtml'
-  
+
 else
   puts("Usage: #{File.split($0).last} source.txt [template.rhtml] > output.html")
   exit!
